@@ -4,6 +4,29 @@ import Foundation
 /// (before the singletons are touched) to point the package at the right
 /// on-disk storage location and to wire host-specific settings.
 public enum ClipboardKitConfig {
+    public static var allowsSimulatedKeystrokes = true
+    public static var sharedHistoryEnabled = false
+    public static var sharedClientIdentifier = ""
+    /// Set by sandboxed hosts to their authorized App Group container.
+    public static var sharedContainerURL: URL?
+
+    public static func enableSharedHistory(client: String) {
+        sharedClientIdentifier = client
+        sharedHistoryEnabled = true
+    }
+
+    public static var sharedHistoryDirectory: URL {
+        if let sharedContainerURL { return sharedContainerURL.appendingPathComponent("ClipboardHistory", isDirectory: true) }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Humanlike/ClipboardHistory", isDirectory: true)
+    }
+
+    static var legacyDirectories: [(String, URL)] {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return [("clippy", support.appendingPathComponent("Clippy")),
+                ("coworker", support.appendingPathComponent("Coworker/ClipboardHistory"))]
+    }
+
 
     /// Hosts may supply their own history limit; Coworker retains the default.
     public static var maximumHistoryItems: () -> Int = { 400 }

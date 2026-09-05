@@ -60,11 +60,33 @@ public final class ClipboardUsageTracker {
     private var saveWorkItem: DispatchWorkItem?
 
     private var usageFileURL: URL {
-        ClipboardItem.storageDirectoryURL.appendingPathComponent("clipboard-usage.json")
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent(ClipboardKitConfig.storageFolderName)
+            .appendingPathComponent("clipboard-usage.json")
     }
 
     private init() {
         load()
+    }
+
+    /// Suggestions must not preserve text that has been deleted from shared history.
+    public func retainHistory(_ items: [ClipboardItem]) {
+        let keys = Set(items.compactMap { $0.textContent }.map(Self.normalizedKey))
+        let retained = recordsByKey.filter { keys.contains($0.key) }
+        guard retained.count != recordsByKey.count else { return }
+        recordsByKey = retained
+        save()
+    }
+
+    public func remove(_ item: ClipboardItem) {
+        guard let text = item.textContent else { return }
+        recordsByKey.removeValue(forKey: Self.normalizedKey(text))
+        save()
+    }
+
+    public func clear() {
+        recordsByKey.removeAll()
+        save()
     }
 
     public func recordCopy(of item: ClipboardItem) {
@@ -185,6 +207,7 @@ public final class ClipboardUsageTracker {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(recordsByKey)
+            try FileManager.default.createDirectory(at: usageFileURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try data.write(to: usageFileURL, options: .atomic)
         } catch {
             print("Failed to save clipboard usage: \(error)")

@@ -2,7 +2,9 @@ import SwiftUI
 import Carbon
 import AVFoundation
 import ClipboardKit
+#if !APP_STORE
 import Sparkle
+#endif
 
 /// Settings window view
 struct SettingsView: View {
@@ -77,11 +79,12 @@ struct SettingsView: View {
                             Spacer()
                             
                                 Toggle("", isOn: $settings.autoPaste)
+                                    .disabled(!ClipboardKitConfig.allowsSimulatedKeystrokes)
                                     .toggleStyle(.switch)
                                     .tint(.blue)
                         }
                         
-                        Text("Automatically paste the selected item into the previously active app")
+                        Text(ClipboardKitConfig.allowsSimulatedKeystrokes ? "Automatically paste the selected item into the previously active app" : "Select an item, then press Command-V in your destination app.")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary.opacity(0.8))
                         
@@ -208,10 +211,12 @@ struct SettingsView: View {
             Label("Optional online AI", systemImage: "sparkles")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.blue)
+            #if !APP_STORE
             Toggle("Enable AI paste", isOn: $cloudAIEnabled)
             Text("AI paste sends the prompt you submit and a random installation ID to Humanlike's online service. Service limits apply. Clipboard history works free and offline without it.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+            #endif
             SecureField("Your Gemini API key (optional)", text: $voiceAPIKey)
                 .textFieldStyle(.roundedBorder)
             HStack {
@@ -245,6 +250,7 @@ struct SettingsView: View {
                 .foregroundColor(.secondary)
             
             VStack(spacing: 10) {
+                #if !APP_STORE
                 // Accessibility Permission
                 HStack {
                     Image(systemName: hasAccessibilityPermission ? "checkmark.circle.fill" : "xmark.circle.fill")
@@ -280,6 +286,7 @@ struct SettingsView: View {
                         .fill(Color(nsColor: .controlBackgroundColor))
                 )
                 
+                #endif
                 // Microphone Permission
                 HStack {
                     Image(systemName: hasMicrophonePermission ? "checkmark.circle.fill" : "xmark.circle.fill")
@@ -366,7 +373,7 @@ struct SettingsView: View {
     }
     
     private func openPrivacySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+        if let url = URL(string: ClipboardKitConfig.allowsSimulatedKeystrokes ? "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" : "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -507,8 +514,12 @@ struct SettingsView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.blue)
             
+            Text("Clippy and updated Coworker share up to 400 recent clips on this Mac. Deleting or clearing history affects both apps. Your display limit only changes this list.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             HStack {
-                Text("Maximum items:")
+                Text("Items shown:")
                     .foregroundColor(.secondary)
                 
                 Spacer()
@@ -524,7 +535,7 @@ struct SettingsView: View {
             }
             
             HStack {
-                Text("Clear history on quit:")
+                Text("Clear shared history on quit:")
                     .foregroundColor(.secondary)
                 
                 Spacer()
@@ -556,6 +567,7 @@ struct SettingsView: View {
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
             
+            #if !APP_STORE
             Button {
                 if let appDelegate = AppDelegate.shared {
                     appDelegate.updaterController.checkForUpdates(nil)
@@ -568,6 +580,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            #endif
         }
     }
     

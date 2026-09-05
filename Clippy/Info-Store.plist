@@ -30,19 +30,9 @@
 	<string>Copyright © 2026 Clippy contributors. MIT licensed.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Clippy needs to send keyboard events to paste clipboard content into other applications.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Clippy needs access to your microphone so you can talk to the AI penguin in real-time.</string>
-	<key>SUFeedURL</key>
-	<string>https://tryhumanlike.com/clippy/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>Il3JmgvFXm/RsItuXskv8HmvKNexFXHlmOu5VqZlP6w=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
-	<key>SUScheduledCheckInterval</key>
-	<integer>86400</integer>
+	<key>ClippyAppGroup</key>
+	<string>$(CLIPPY_APP_GROUP)</string>
 </dict>
 </plist>

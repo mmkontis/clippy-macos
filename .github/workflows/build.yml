@@ -15,3 +15,11 @@ jobs:
           -configuration Release -derivedDataPath build
           -destination 'generic/platform=macOS'
           'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      - name: Build the sandboxed Store edition
+        run: >-
+          xcodebuild -project Clippy.xcodeproj -scheme ClippyStore
+          -configuration Release -derivedDataPath build-store
+          -destination 'generic/platform=macOS'
+          'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      - name: Verify Store updater exclusion
+        run: test ! -d build-store/Build/Products/Release/Clippy.app/Contents/Frameworks/Sparkle.framework

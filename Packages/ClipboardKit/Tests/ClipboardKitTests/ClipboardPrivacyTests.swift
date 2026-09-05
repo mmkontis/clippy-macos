@@ -35,5 +35,9 @@ final class ClipboardPrivacyTests: XCTestCase {
         let data = try Data(contentsOf: storage.appendingPathComponent("history.json"))
         let stored = try JSONDecoder().decode([ClipboardItem].self, from: data)
         XCTAssertTrue(stored.isEmpty, "Clear must reach disk synchronously before the app terminates.")
+        let usage = try Data(contentsOf: storage.appendingPathComponent("clipboard-usage.json"))
+        let records = try XCTUnwrap(JSONSerialization.jsonObject(with: usage) as? [String: Any])
+        XCTAssertTrue(records.isEmpty, "Clearing history must also erase copied text retained for suggestions.")
+
     }
 }

@@ -1,37 +1,21 @@
-# Clippy
+<p align="center"><img src="docs/assets/clippy.png" width="112" alt="Clippy logo"></p>
+<h1 align="center">Your clipboard, with a memory.</h1>
+<p align="center">Find the text, images, and files you copied. Get back to doing.</p>
+<p align="center"><strong>Free · Open source · No account · macOS 14+</strong></p>
+<p align="center"><a href="https://github.com/mmkontis/clippy-macos/releases"><img src="docs/assets/download.svg" width="260" alt="Download for Mac. View releases and installer availability."></a></p>
 
-A free, open source clipboard manager for macOS 14 or later. No account, subscription, or sign-in is required for clipboard history.
+**Installer status:** Apple signing is pending. The releases page currently offers source code, not a ready-to-install Mac download.
 
-Copy text, images, and files, then press `⌘⇧V` or click the menu bar clipboard to search and reuse them. Customize shortcuts in Settings. The single welcome screen is optional. Accessibility enables automatic paste; manual copy and paste works without it.
+<p align="center"><img src="app-store/screenshots/01-history.png" alt="Clippy clipboard history with sample entries" width="900"></p>
 
-## Build from source
+### Copy. Find. Reuse.
 
-Install Xcode with the macOS SDK, open `Clippy.xcodeproj`, and run the Clippy scheme. Choose your own signing team for development. The project includes its ClipboardKit dependency; no Humanlike monorepo or private service is needed to build or use clipboard history. Xcode downloads the pinned Sparkle dependency from its public repository.
+1. Open Clippy. The welcome screen takes a moment and is optional.
+2. Copy anything. Press **⌘⇧V** to search your history.
+3. Choose an item and paste. Enable optional Accessibility for automatic paste.
 
-For a local development build:
+History stays on your Mac. Updated Clippy and Coworker builds automatically combine it, without an account. The Coworker dictation banner is optional and dismissible.
 
-```sh
-./build_and_run.sh
-```
+**Optional AI:** Off by default. AI features use online services; voice needs your own Gemini key. [Privacy details](PRIVACY.md).
 
-This builds and opens a local copy without replacing an installed app. Public distribution needs Developer ID signing and notarization. See [RELEASE.md](RELEASE.md).
-
-## Optional AI
-
-AI paste is off by default. Enable it in Settings to send explicitly submitted prompts and a random installation identifier to Humanlike's online AI service. Service availability and usage limits apply; the server is not part of this repository.
-
-The optional voice penguin requires your own Gemini API key, stored in macOS Keychain. Starting a conversation sends microphone audio to Google. Provider charges may apply. Neither feature is needed for the free clipboard manager. See [PRIVACY.md](PRIVACY.md).
-
-## Relationship to Coworker
-
-Clippy and Coworker's built-in clipboard use the same ClipboardKit source. Clippy bundles a snapshot in `Packages/ClipboardKit` so a standalone clone builds independently.
-
-Within the Humanlike workspace, `../ClipboardKit` remains the canonical shared implementation. Run `python3 scripts/sync-clipboard-kit.py` after changing it, then review and commit the snapshot. `--check` detects drift. App-specific panels, settings, and keyboard shortcuts remain separate and do not automatically sync.
-
-Clipboard history is local and separate: Clippy uses `~/Library/Application Support/Clippy`; Coworker uses `~/Library/Application Support/Coworker/ClipboardHistory`. There is no account sync, history migration, or cross-device sync. Both can observe new copies from the Mac's system clipboard while running. Avoid assigning both apps the same shortcut.
-
-The dismissible banner below clipboard history introduces Coworker's separate dictation app. Dismissal persists, and a compact link remains. Coworker has its own service terms and onboarding; using it is optional.
-
-## License
-
-MIT. See [LICENSE](LICENSE). Sparkle is separately licensed under its [upstream license](https://github.com/sparkle-project/Sparkle/blob/2.9.0/LICENSE).
+[Build it yourself](DEVELOPMENT.md) · [Report an issue](https://github.com/mmkontis/clippy-macos/issues) · [MIT license](LICENSE)

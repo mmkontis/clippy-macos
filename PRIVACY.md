@@ -1,8 +1,8 @@
 # Privacy
 
-Clipboard history, files, and images are stored locally under `~/Library/Application Support/Clippy`. They are not encrypted by Clippy. macOS account access and FileVault protect the underlying disk according to your Mac's configuration. You can remove items, clear history, or enable clear history on quit in Settings.
+Clipboard history, files, and images are stored locally in the shared local folder `~/Library/Application Support/Humanlike/ClipboardHistory`. They are not encrypted by Clippy. macOS account access and FileVault protect the underlying disk according to your Mac's configuration. You can remove items, clear history, or enable clear history on quit in Settings.
 
-No Clippy account is required. Clipboard history is not uploaded or synchronized with Coworker. Content marked as concealed or transient by the copying app is excluded; ordinary copied secrets can still enter history.
+No Clippy account is required. Updated Clippy and Coworker builds share this local history automatically. Copies and deletions appear in both apps. Nothing is synchronized across devices. Earlier history files are imported once and retained in their original folders as recovery copies; clearing the shared history does not erase those old recovery files. Content marked as concealed or transient by the copying app is excluded; ordinary copied secrets can still enter history.
 
 AI paste is optional and off by default. When enabled, the prompt you explicitly submit and a random persistent installation ID are sent to Humanlike's online AI endpoint. The endpoint uses the ID for service limits and may process requests through an AI provider. Do not enable this option for material you do not want processed online.
 

@@ -31,6 +31,7 @@ public struct ClipboardItem: Identifiable, Codable, Equatable {
     /// everything the package persists. The host app picks `appFolder` via
     /// `ClipboardKitConfig.storageFolderName`.
     public static var storageDirectoryURL: URL {
+        if ClipboardKitConfig.sharedHistoryEnabled { return ClipboardKitConfig.sharedHistoryDirectory }
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent(ClipboardKitConfig.storageFolderName, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

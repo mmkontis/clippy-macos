@@ -251,6 +251,9 @@ class AIChatService: ObservableObject {
 
     /// Simulates a mouse click at the current cursor position to ensure focus
     private func simulateClick() {
+        #if APP_STORE
+        return
+        #endif
         let mouseLocation = NSEvent.mouseLocation
         // Convert to screen coordinates (flip Y)
         guard let screen = NSScreen.main else { return }
@@ -274,6 +277,9 @@ class AIChatService: ObservableObject {
 
     /// Simulates Cmd+V keystroke
     private func simulatePaste() {
+        #if APP_STORE
+        return
+        #endif
         let source = CGEventSource(stateID: .combinedSessionState)
         source?.localEventsSuppressionInterval = 0.0
 

@@ -26,6 +26,9 @@ struct ClipboardPanel: View {
                         .frame(maxHeight: .infinity, alignment: .bottom)
                 )
             
+            if let error = clipboardManager.storageError {
+                Text(error).font(.caption).foregroundStyle(.orange).padding(10)
+            }
             // Clipboard items list
             if clipboardManager.filteredItems.isEmpty {
                 emptyStateView
@@ -130,6 +133,7 @@ struct ClipboardPanel: View {
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
             
+            #if !APP_STORE
             // Sparkle button: if search text is present, use it as AI prompt; otherwise switch to AI panel
             Button(action: {
                 let query = clipboardManager.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,6 +161,7 @@ struct ClipboardPanel: View {
             }
             .buttonStyle(.plain)
             .help("Switch to AI (Cmd+Shift+C)")
+            #endif
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -246,8 +251,8 @@ struct ClipboardPanel: View {
         HStack {
             HStack(spacing: 12) {
                 hintItem(keys: ["↑", "↓"], text: "Navigate")
-                hintItem(keys: ["↵"], text: "Paste")
-                hintItem(keys: ["⌘1-0"], text: "Quick paste")
+                hintItem(keys: ["↵"], text: ClipboardKitConfig.allowsSimulatedKeystrokes ? "Paste" : "Copy")
+                hintItem(keys: ["⌘1-0"], text: ClipboardKitConfig.allowsSimulatedKeystrokes ? "Quick paste" : "Quick copy")
             }
             
             Spacer()

@@ -38,7 +38,9 @@ class HotkeyHandler: ObservableObject {
         
         // Register the Carbon hotkeys (no permission prompt)
         registerHotkey()
+        #if !APP_STORE
         registerAIHotkey()
+        #endif
         registerPenguinHotkey()
         
         isActive = true

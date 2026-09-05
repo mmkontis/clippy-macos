@@ -1,3 +1,4 @@
+#if !APP_STORE
 import Foundation
 import Sparkle
 
@@ -9,3 +10,5 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         "https://tryhumanlike.com/clippy/appcast.xml"
     }
 }
+
+#endif

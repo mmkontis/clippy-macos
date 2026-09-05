@@ -22,6 +22,14 @@ public final class ClipboardManager: ObservableObject {
 
     private var filterCancellable: AnyCancellable?
     private var saveWorkItem: DispatchWorkItem?
+    private var sharedStore: SharedClipboardStore?
+    private var sharedRefreshTimer: Timer?
+    private var lastSharedRevision: Int64 = -1
+    private var lastSharedLimit = 0
+    @Published public private(set) var storageError: String?
+    @Published public private(set) var companionDetected = false
+    public var usesSharedHistory: Bool { sharedStore != nil }
+
 
     /// Path to the history file (under the host-configured storage folder).
     private var historyFileURL: URL {
@@ -29,7 +37,21 @@ public final class ClipboardManager: ObservableObject {
     }
 
     private init() {
-        loadHistory()
+        if ClipboardKitConfig.sharedHistoryEnabled {
+            do {
+                let store = try SharedClipboardStore(directory: ClipboardKitConfig.sharedHistoryDirectory)
+                sharedStore = store
+                try store.register(client: ClipboardKitConfig.sharedClientIdentifier)
+                importLegacyHistory()
+                refreshSharedHistory()
+                sharedRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                    Task { @MainActor in self?.refreshSharedHistory() }
+                }
+                if let sharedRefreshTimer { RunLoop.current.add(sharedRefreshTimer, forMode: .common) }
+            } catch { storageError = "Shared history is unavailable. Your earlier history is still on this Mac." }
+        } else {
+            loadHistory()
+        }
 
         filterCancellable = Publishers.CombineLatest($items, $searchQuery)
             .map { items, query in
@@ -43,9 +65,53 @@ public final class ClipboardManager: ObservableObject {
         filteredItems = items
     }
 
+    private func importLegacyHistory() {
+        guard let sharedStore else { return }
+        for (identifier, directory) in ClipboardKitConfig.legacyDirectories {
+            do { try sharedStore.importLegacy(directory: directory, identifier: identifier) }
+            catch { storageError = "Some earlier history could not be imported. The original files have been kept." }
+        }
+    }
+
+    public func refreshSharedHistory() {
+        guard let sharedStore else { return }
+        do {
+            let snapshot = try sharedStore.snapshot(limit: 400)
+            if snapshot.revision != lastSharedRevision || lastSharedLimit != maxItems {
+                items = Array(snapshot.items.prefix(maxItems))
+                ClipboardUsageTracker.shared.retainHistory(snapshot.items)
+                let retainedIDs = Set(snapshot.items.map(\.id))
+                for queued in RecentMediaQueue.shared.items where !retainedIDs.contains(queued.id) {
+                    RecentMediaQueue.shared.dismiss(queued)
+                }
+                lastSharedRevision = snapshot.revision
+                lastSharedLimit = maxItems
+            }
+            let companion = ClipboardKitConfig.sharedClientIdentifier == "clippy" ? "coworker" : "clippy"
+            companionDetected = try sharedStore.hasClient(companion)
+        } catch { storageError = "Shared history could not be refreshed. Please try again." }
+    }
+
+    private func sharedMutation(_ operation: (SharedClipboardStore) throws -> Void) -> Bool {
+        guard ClipboardKitConfig.sharedHistoryEnabled else { return false }
+        guard let sharedStore else { return true }
+        do {
+            try operation(sharedStore)
+            refreshSharedHistory()
+        } catch { storageError = "That change could not be saved. Please try again." }
+        return true
+    }
+
     /// Adds a new item to the history
     public func addItem(_ item: ClipboardItem) {
         ClipboardUsageTracker.shared.recordCopy(of: item)
+        var savedSuccessfully = false
+        if sharedMutation({ try $0.upsert(item); savedSuccessfully = true }) {
+            if savedSuccessfully, let saved = items.first, saved.contentType == .image || saved.contentType == .fileURL {
+                RecentMediaQueue.shared.enqueue(saved)
+            }
+            return
+        }
 
         // Check for duplicates - remove existing if found
         if let existingIndex = items.firstIndex(where: { $0 == item }) {
@@ -83,6 +149,11 @@ public final class ClipboardManager: ObservableObject {
     }
 
     public func enforceHistoryLimit() {
+        if usesSharedHistory {
+            lastSharedRevision = -1
+            refreshSharedHistory()
+            return
+        }
         guard items.count > maxItems else { return }
         for item in items.dropFirst(maxItems) { deleteImageFile(for: item) }
         items = Array(items.prefix(maxItems))
@@ -91,6 +162,9 @@ public final class ClipboardManager: ObservableObject {
 
     /// Removes an item from history
     public func removeItem(_ item: ClipboardItem) {
+        if sharedMutation({ try $0.remove(id: item.id) }) { return }
+        ClipboardUsageTracker.shared.remove(item)
+        RecentMediaQueue.shared.dismiss(item)
         deleteImageFile(for: item)
         items.removeAll { $0.id == item.id }
         scheduleSave()
@@ -99,6 +173,9 @@ public final class ClipboardManager: ObservableObject {
     /// Removes an item at a specific index
     public func removeItem(at index: Int) {
         guard index >= 0 && index < items.count else { return }
+        if sharedMutation({ try $0.remove(id: items[index].id) }) { return }
+        ClipboardUsageTracker.shared.remove(items[index])
+        RecentMediaQueue.shared.dismiss(items[index])
         deleteImageFile(for: items[index])
         items.remove(at: index)
         scheduleSave()
@@ -106,6 +183,9 @@ public final class ClipboardManager: ObservableObject {
 
     /// Clears all history
     public func clearHistory() {
+        if sharedMutation({ try $0.clear() }) { return }
+        ClipboardUsageTracker.shared.clear()
+        RecentMediaQueue.shared.dismissAll()
         for item in items { deleteImageFile(for: item) }
         items.removeAll()
         saveHistory()
@@ -122,7 +202,9 @@ public final class ClipboardManager: ObservableObject {
         ClipboardUsageTracker.shared.recordPaste(of: item)
 
         // Move item to top of history
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
+        if sharedMutation({ try $0.moveToFront(id: item.id) }) {
+            // The item can still be copied, but a stale selection never restores a deleted row.
+        } else if let index = items.firstIndex(where: { $0.id == item.id }) {
             items.remove(at: index)
             items.insert(item, at: 0)
             scheduleSave()
@@ -141,6 +223,7 @@ public final class ClipboardManager: ObservableObject {
 
     /// Simulates Cmd+V keystroke
     public nonisolated func simulatePaste() {
+        guard ClipboardKitConfig.allowsSimulatedKeystrokes else { return }
         let checkOptPrompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [checkOptPrompt: false] as CFDictionary
         let accessEnabled = AXIsProcessTrustedWithOptions(options)
@@ -154,6 +237,7 @@ public final class ClipboardManager: ObservableObject {
 
     /// Simulates a Return keystroke (used by hosts that want to "paste & confirm").
     public nonisolated func simulateEnter() {
+        guard ClipboardKitConfig.allowsSimulatedKeystrokes else { return }
         let checkOptPrompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [checkOptPrompt: false] as CFDictionary
         let accessEnabled = AXIsProcessTrustedWithOptions(options)
@@ -243,6 +327,7 @@ public final class ClipboardManager: ObservableObject {
     }
 
     private func saveHistoryNow() {
+        guard !ClipboardKitConfig.sharedHistoryEnabled else { return }
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601

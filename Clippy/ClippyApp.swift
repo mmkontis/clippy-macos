@@ -2,7 +2,9 @@ import SwiftUI
 import AppKit
 import ApplicationServices
 import ClipboardKit
+#if !APP_STORE
 import Sparkle
+#endif
 
 @main
 struct ClippyApp: App {
@@ -31,11 +33,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventMonitor: Any?
     private var aiEventMonitor: Any?
     
+    #if !APP_STORE
     let updaterDelegate = UpdaterDelegate.shared
     lazy var updaterController: SPUStandardUpdaterController = {
         SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: updaterDelegate, userDriverDelegate: nil)
     }()
     
+    #endif
+
     /// The application that was active before showing the panel
     static var previousActiveApp: NSRunningApplication?
     
@@ -46,17 +51,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyHandler = HotkeyHandler.shared
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        if let index = CommandLine.arguments.firstIndex(of: "--capture-listing"), CommandLine.arguments.count > index + 1 {
+            captureListing(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+            return
+        }
+        #endif
         // Set shared instance for access from SwiftUI views
         AppDelegate.shared = self
 
         // Point ClipboardKit at Clippy's storage folder and route the
         // dismiss-on-paste setting through the host's AppSettings.
         ClipboardKitConfig.storageFolderName = "Clippy"
+        #if APP_STORE
+        // Store builds must use the provisioned App Group, never an unrelated sandbox path.
+        guard let group = Bundle.main.object(forInfoDictionaryKey: "ClippyAppGroup") as? String,
+              !group.isEmpty,
+              let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
+            let alert = NSAlert()
+            alert.messageText = "Clippy needs its shared storage configuration"
+            alert.informativeText = "This build is not configured for distribution. Please install a verified release."
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
+        ClipboardKitConfig.sharedContainerURL = container
+        ClipboardKitConfig.allowsSimulatedKeystrokes = false
+        #endif
+        ClipboardKitConfig.enableSharedHistory(client: "clippy")
         ClipboardKitConfig.maximumHistoryItems = { AppSettings.shared.maxHistoryItems }
         ClipboardKitConfig.dismissOnPasteEnabled = { AppSettings.shared.dismissRecentOnPaste }
 
         // Initialize Sparkle updater and start feed checks
+        #if !APP_STORE
         _ = updaterController
+        #endif
         
         setupStatusItem()
         setupHotkey()
@@ -135,10 +164,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
+        #if !APP_STORE
         let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "u")
         updateItem.target = updaterController
         menu.addItem(updateItem)
         menu.addItem(NSMenuItem.separator())
+        #endif
         menu.addItem(NSMenuItem(title: "Quit Clippy", action: #selector(quitApp), keyEquivalent: "q"))
         
         statusItem?.menu = menu
@@ -397,7 +428,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Uses the same approach as Avra's pasteText() function
     func pasteAndHide() {
         let previousApp = AppDelegate.previousActiveApp
-        let shouldAutoPaste = AppSettings.shared.autoPaste
+        let shouldAutoPaste = AppSettings.shared.autoPaste && ClipboardKitConfig.allowsSimulatedKeystrokes
         
         debugLog("pasteAndHide called - previousApp: \(previousApp?.localizedName ?? "nil"), autoPaste: \(shouldAutoPaste)")
         
@@ -542,6 +573,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @MainActor
     private func showAIPanelWindow(nearCursor: Bool = false) {
+        #if APP_STORE
+        return // Streaming keystroke insertion belongs to the direct-download edition.
+        #endif
         // Store the currently active application before we take focus
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -725,3 +759,82 @@ extension NSApplication {
         activate(ignoringOtherApps: true)
     }
 }
+
+#if DEBUG
+// Real SwiftUI views with isolated, synthetic history for reproducible listing assets.
+// This mode never starts clipboard monitoring or touches the user's history.
+extension AppDelegate {
+    @MainActor
+    private func captureListing(to output: URL) {
+        #if APP_STORE
+        ClipboardKitConfig.allowsSimulatedKeystrokes = false
+        #endif
+        ClipboardKitConfig.sharedHistoryEnabled = false
+        ClipboardKitConfig.storageFolderName = "Clippy-Screenshots/" + UUID().uuidString
+        let demoDirectory = ClipboardItem.storageDirectoryURL
+        let manager = ClipboardManager.shared
+        ["See you tomorrow at 10:00 ☕", "A little less searching. A little more doing.",
+         "https://github.com/mmkontis/clippy-macos", "Shopping list: coffee, apples, fresh bread", 
+         "Your next great idea starts here."].forEach { manager.addItem(.fromText($0, source: "Notes")) }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.appearance = NSAppearance(named: .aqua)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        self.panelWindow = window
+        let captures = [
+            ("01-history.png", "Copy once.\nFind it whenever.", "Your clipboard, with a memory."),
+            ("02-search.png", "Find that thing\nyou copied.", "Search your history in a moment.")
+        ]
+        try? FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        func render(_ index: Int) {
+            guard index < captures.count else {
+                try? FileManager.default.removeItem(at: demoDirectory)
+                NSApp.terminate(nil)
+                return
+            }
+            let entry = captures[index]
+            let view = ListingScreenshot(title: entry.1, subtitle: entry.2, manager: manager)
+            let hosting = NSHostingView(rootView: view)
+            hosting.frame = NSRect(x: 0, y: 0, width: 1280, height: 800)
+            window.contentView = hosting
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                manager.searchQuery = index == 1 ? "idea" : ""
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    hosting.layoutSubtreeIfNeeded()
+                    if let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+                        if let data = bitmap.representation(using: .png, properties: [:]) {
+                            try? data.write(to: output.appendingPathComponent(entry.0))
+                        }
+                    }
+                    render(index + 1)
+                }
+            }
+        }
+        render(0)
+    }
+}
+private struct ListingScreenshot: View {
+    let title: String
+    let subtitle: String
+    @ObservedObject var manager: ClipboardManager
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.94, green: 0.97, blue: 1), Color(red: 0.80, green: 0.88, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            HStack(spacing: 90) {
+                VStack(alignment: .leading, spacing: 24) {
+                    Label("Clippy", systemImage: "clipboard.fill").font(.system(size: 30, weight: .bold)).foregroundStyle(.blue)
+                    Text(title).font(.system(size: 54, weight: .bold, design: .rounded)).tracking(-1.5)
+                    Text(subtitle).font(.system(size: 22)).foregroundStyle(.secondary)
+                    Text("Free. Open source. No account.").font(.system(size: 17, weight: .medium)).padding(.top, 14)
+                }.frame(width: 490, alignment: .leading)
+                ClipboardPanel(clipboardManager: manager, isPresented: .constant(true))
+            }.padding(80)
+        }.frame(width: 1280, height: 800).environment(\.colorScheme, .light)
+    }
+}
+#endif

@@ -17,19 +17,26 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label("Copy something, then press ⌘⇧V to find it.", systemImage: "keyboard")
                 Label("You can also click Clippy in the menu bar.", systemImage: "menubar.rectangle")
-                Label("Your clipboard history is stored on this Mac.", systemImage: "lock.shield")
+                Label("History stays on this Mac and is shared with Coworker.", systemImage: "lock.shield")
             }
             .font(.system(size: 13))
+            #if !APP_STORE
             Text("Accessibility is optional. Enable it to paste directly into other apps. You can always copy an item and paste it yourself.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            #else
+            Text("Choose an item, then press Command-V to paste it into your app.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            #endif
             HStack(spacing: 12) {
+                #if !APP_STORE
                 Button(hasAccessibility ? "Accessibility enabled" : "Enable auto-paste") {
                     let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
                     AXIsProcessTrustedWithOptions(options)
                 }
                 .disabled(hasAccessibility)
+                #endif
                 Button("Start using Clippy") {
                     AppSettings.shared.hasCompletedOnboarding = true
                     isPresented = false
