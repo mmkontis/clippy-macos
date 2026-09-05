@@ -2,9 +2,9 @@
 <h1 align="center">Your clipboard, with a memory.</h1>
 <p align="center">Find the text, images, and files you copied. Get back to doing.</p>
 <p align="center"><strong>Free · Open source · No account · macOS 14+</strong></p>
-<p align="center"><a href="https://github.com/mmkontis/clippy-macos/releases"><img src="docs/assets/download.svg" width="260" alt="Download for Mac. View releases and installer availability."></a></p>
+<p align="center"><a href="https://github.com/mmkontis/clippy-macos/releases/download/v1.2.0/Clippy-1.2.0.zip"><img src="docs/assets/download.svg" width="260" alt="Download Clippy for Mac. Apple signed and notarized."></a></p>
 
-**Installer status:** Apple signing is pending. The releases page currently offers source code, not a ready-to-install Mac download.
+**Install:** Download the ZIP, unzip it, and drag **Clippy.app** into **Applications**. Apple signed and notarized. Works on Apple Silicon and Intel.
 
 <p align="center"><img src="app-store/screenshots/01-history.png" alt="Clippy. Your copied notes and links in a bright, readable clipboard panel." width="900"></p>
 <p align="center">

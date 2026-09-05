@@ -35,3 +35,9 @@ The Store draft contains five screenshots, including the native media bar. This 
 ## Direct-download update feed
 
 New GitHub builds use `https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml`. Publish and verify the signed download before committing its Sparkle enclosure to this feed. The website feed can mirror it after deployment. The legacy website feed is not a release dependency for new GitHub installations.
+
+## Xcode account notarization
+
+The first GitHub download is a ZIP containing the Developer ID signed and stapled app. Xcode can upload an archive for notarization using its signed-in Apple account (`-exportArchive`, `method=developer-id`, `destination=upload`). After Apple accepts it, run `scripts/package-notarized-app.py --archive /path/to/Clippy.xcarchive --sparkle-bin /path/to/Sparkle/bin`. It verifies notarization, signatures, architecture, and the existing update key before exporting the ZIP. Users unzip it and drag Clippy.app into Applications.
+
+The DMG workflow in `create_dmg.sh` remains available when a notarytool Keychain profile is configured. Never distribute the old unsigned preview. Store build 8 has uploaded successfully and passed processing; public App Review submission still requires the remaining listing declarations.
