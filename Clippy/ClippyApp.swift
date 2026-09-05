@@ -390,21 +390,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// Helper to write debug logs
     private func debugLog(_ message: String) {
-        let logMessage = "[\(Date())] \(message)\n"
-        let logPath = "/tmp/clippy_debug.log"
-        
-        if let data = logMessage.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logPath) {
-                if let handle = FileHandle(forWritingAtPath: logPath) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                FileManager.default.createFile(atPath: logPath, contents: data)
-            }
-        }
-        print("📋 \(message)")
+        // Clipboard content and app activity must not be persisted in debug logs.
     }
     
     /// Hides the panel, reactivates the previous app, and triggers paste if enabled

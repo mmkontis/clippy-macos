@@ -356,25 +356,11 @@ struct ClipboardPanel: View {
     
     /// Helper to write debug logs to file
     private func debugLog(_ message: String) {
-        let logMessage = "[\(Date())] [ClipboardPanel] \(message)\n"
-        let logPath = "/tmp/clippy_debug.log"
-        
-        if let data = logMessage.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logPath) {
-                if let handle = FileHandle(forWritingAtPath: logPath) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                FileManager.default.createFile(atPath: logPath, contents: data)
-            }
-        }
-        print("📋 [ClipboardPanel] \(message)")
+        // Clipboard content and app activity must not be persisted in debug logs.
     }
     
     private func pasteItem(_ item: ClipboardItem) {
-        debugLog("pasteItem called for: \(item.previewText)")
+        debugLog("Clipboard item selected")
         
         // Pause monitoring to avoid re-adding our own paste
         ClipboardMonitor.shared.pauseMonitoring()
