@@ -1,2 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Clippy Updates</title><link>https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml</link><description>Free clipboard history for Mac</description><language>en</language></channel></rss>
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Clippy Updates</title>
+    <link>https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml</link>
+    <description>Free clipboard history for Mac</description>
+    <language>en</language>
+    <item>
+      <title>Clippy 1.2.0</title>
+      <pubDate>Sat, 05 Sep 2026 22:15:29 +0000</pubDate>
+      <sparkle:version>8</sparkle:version>
+      <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/mmkontis/clippy-macos/releases/download/v1.2.0/Clippy-1.2.0.zip" length="4459003" type="application/octet-stream" sparkle:edSignature="E0pJc5J14DVHv4mCh4/4IvE3LsfAT95khd+d5V6mxR+/oWOdtu0yy2lt18+Ua4vnz7cMVVjL1qP4ckAdP5JsBA==" />
+    </item>
+  </channel>
+</rss>
