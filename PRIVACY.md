@@ -1,6 +1,6 @@
 # Privacy
 
-Clipboard history, files, and images are stored locally in the shared local folder `~/Library/Application Support/Humanlike/ClipboardHistory`. They are not encrypted by Clippy. macOS account access and FileVault protect the underlying disk according to your Mac's configuration. You can remove items, clear history, or enable clear history on quit in Settings.
+Direct-download builds store clipboard history and images locally in `~/Library/Application Support/Humanlike/ClipboardHistory`. The Store target requires an authorized local App Group container. File entries reference the original files. They are not encrypted by Clippy. macOS account access and FileVault protect the underlying disk according to your Mac's configuration. You can remove items, clear history, or enable clear history on quit in Settings.
 
 No Clippy account is required. Updated Clippy and Coworker builds share this local history automatically. Copies and deletions appear in both apps. Nothing is synchronized across devices. Earlier history files are imported once and retained in their original folders as recovery copies; clearing the shared history does not erase those old recovery files. Content marked as concealed or transient by the copying app is excluded; ordinary copied secrets can still enter history.
 

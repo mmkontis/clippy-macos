@@ -774,7 +774,7 @@ extension AppDelegate {
         let demoDirectory = ClipboardItem.storageDirectoryURL
         let manager = ClipboardManager.shared
         ["See you tomorrow at 10:00 ☕", "A little less searching. A little more doing.",
-         "https://github.com/mmkontis/clippy-macos", "Shopping list: coffee, apples, fresh bread", 
+         "https://github.com/mmkontis/clippy-macos", "Shopping list: coffee, apples, fresh bread",
          "Your next great idea starts here."].forEach { manager.addItem(.fromText($0, source: "Notes")) }
         NSApp.setActivationPolicy(.regular)
         NSApp.appearance = NSAppearance(named: .aqua)
