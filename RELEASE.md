@@ -31,3 +31,7 @@ The website hosts the public feed and installers only. Signing secrets stay on t
 The `ClippyStore` target uses the registered `group.ai.univation.clipboard` App Group. The Apple Distribution and Mac Installer Distribution certificates were issued for Univation, and profile `Clippy Mac App Store 2026` was generated on September 6, 2026. A universal version 1.2.0 (build 8) archive and installer passed local signature, sandbox entitlement, App Group, and Sparkle exclusion checks.
 
 The Store draft contains five screenshots, including the native media bar. This is not a published release. Upload requires an Xcode account with App Store Connect access. Content rights, age rating, app privacy, reviewer contact completion, and signed runtime validation must be finished before submission.
+
+## Direct-download update feed
+
+New GitHub builds use `https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml`. Publish and verify the signed download before committing its Sparkle enclosure to this feed. The website feed can mirror it after deployment. The legacy website feed is not a release dependency for new GitHub installations.

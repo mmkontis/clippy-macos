@@ -7,7 +7,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     static let shared = UpdaterDelegate()
 
     func feedURLString(for updater: SPUUpdater) -> String? {
-        "https://tryhumanlike.com/clippy/appcast.xml"
+        "https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml"
     }
 }
 

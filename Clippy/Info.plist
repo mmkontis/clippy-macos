@@ -35,7 +35,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Clippy needs access to your microphone so you can talk to the AI penguin in real-time.</string>
 	<key>SUFeedURL</key>
-	<string>https://tryhumanlike.com/clippy/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>Il3JmgvFXm/RsItuXskv8HmvKNexFXHlmOu5VqZlP6w=</string>
 	<key>SUEnableAutomaticChecks</key>
