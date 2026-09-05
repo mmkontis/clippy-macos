@@ -1,6 +1,6 @@
 # Releasing Clippy
 
-Version 1.2.0, build 8 is prepared for direct Mac distribution. A successful local build does not establish that the app is notarized or published.
+Version 1.2.0, build 8 is published on GitHub as a Developer ID signed, notarized universal Mac app ZIP. A successful local build alone does not establish that another artifact is notarized or publishable.
 
 1. Run `python3 scripts/sync-clipboard-kit.py --check` in the Humanlike workspace. Review shared changes with Coworker. Standalone clones already include the snapshot.
 2. Build for Apple Silicon and Intel. Exercise text, image and file copies, search, paste, optional permissions, first launch, banner dismissal, settings, and clear history on quit.
@@ -30,7 +30,7 @@ The website hosts the public feed and installers only. Signing secrets stay on t
 
 The `ClippyStore` target uses the registered `group.ai.univation.clipboard` App Group. The Apple Distribution and Mac Installer Distribution certificates were issued for Univation, and profile `Clippy Mac App Store 2026` was generated on September 6, 2026. A universal version 1.2.0 (build 8) archive and installer passed local signature, sandbox entitlement, App Group, and Sparkle exclusion checks.
 
-The Store draft contains five screenshots, including the native media bar. This is not a published release. Upload requires an Xcode account with App Store Connect access. Content rights, age rating, app privacy, reviewer contact completion, and signed runtime validation must be finished before submission.
+The Store draft contains five screenshots, including the native media bar. This is not a published release. Store build 8 uploaded successfully using the connected Xcode account. Content rights, age rating, app privacy, reviewer contact completion, and signed runtime validation must be finished before submission.
 
 ## Direct-download update feed
 
