@@ -10,6 +10,9 @@ struct ClipboardPanel: View {
     @Binding var isPresented: Bool
     @State private var eventMonitor: Any?
     
+    // Listing captures can demonstrate either state without changing saved preferences.
+    var promotionOverride: Bool? = nil
+
     // Callback to submit an AI prompt directly
     var onSubmitAIPrompt: ((_ prompt: String) -> Void)?
     // Callback to switch to AI panel (no text in search)
@@ -36,30 +39,22 @@ struct ClipboardPanel: View {
                 itemsListView
             }
 
-            // Dictation cross-promo: prominent banner by default, and a discrete
-            // always-present row once it's been dismissed.
-            if dictationPromo.bannerVisible {
+            // Dismissing the promotion leaves the whole panel for clipboard history.
+            if promotionOverride ?? dictationPromo.bannerVisible {
                 DictationBanner()
-            } else {
-                DictationModeRow()
             }
 
             // Footer with hints
             footerView
         }
         .frame(width: 420, height: 480)
-        .background(
-            ZStack {
-                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .opacity(0.92)
-            }
-        )
+        .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.primary.opacity(0.1), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 12)
+        .shadow(color: .black.opacity(0.14), radius: 24, x: 0, y: 12)
         .onAppear {
             // Clear search query each time panel opens
             clipboardManager.searchQuery = ""
@@ -446,9 +441,14 @@ struct VisualEffectView: NSViewRepresentable {
 
 // MARK: - Dictation cross-promo
 
+/// Matches the Coworker website's blue-600 brand color (#2563EB).
+enum CoworkerBrand {
+    static let blue = Color(red: 37.0 / 255, green: 99.0 / 255, blue: 235.0 / 255)
+}
+
 /// Shared state for the "get the dictation app" promo. Drives the dismissible
 /// banner at the bottom of the clipboard panel; opened from the status-bar menu,
-/// the panel's discrete row, and Settings. The dictation app is Coworker
+/// and Settings. The dictation app is Coworker
 /// (voice → text anywhere).
 @MainActor
 final class DictationPromo: ObservableObject {
@@ -496,7 +496,7 @@ struct DictationNewBadge: View {
             .padding(.vertical, 2)
             .background(
                 Capsule().fill(
-                    LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing)
+                    CoworkerBrand.blue
                 )
             )
     }
@@ -510,8 +510,8 @@ struct DictationBanner: View {
         HStack(spacing: 11) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                Image(systemName: "mic.fill")
+                    .fill(CoworkerBrand.blue)
+                Image(systemName: "phone.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
             }
@@ -534,14 +534,14 @@ struct DictationBanner: View {
             Spacer(minLength: 4)
 
             Button(action: { promo.openDownloadPage() }) {
-                Text("Explore")
+                Text("Get free")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(
                         Capsule().fill(
-                            LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing)
+                            CoworkerBrand.blue
                         )
                     )
             }
@@ -560,42 +560,12 @@ struct DictationBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.blue.opacity(0.07))
+        .background(CoworkerBrand.blue.opacity(0.07))
         .overlay(
             Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1),
             alignment: .top
         )
         .transition(.move(edge: .bottom).combined(with: .opacity))
-    }
-}
-
-/// Discrete always-present row that re-opens the dictation banner. Shown in the
-/// panel once the banner has been dismissed.
-struct DictationModeRow: View {
-    var body: some View {
-        Button(action: { DictationPromo.shared.reveal() }) {
-            HStack(spacing: 8) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
-                Text("Explore Coworker dictation")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                DictationNewBadge()
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .overlay(
-            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1),
-            alignment: .top
-        )
     }
 }
 

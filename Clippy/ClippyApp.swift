@@ -154,7 +154,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let dictationItem = NSMenuItem(title: "Get Coworker Dictation", action: #selector(openDictationMode), keyEquivalent: "")
         dictationItem.target = self
-        dictationItem.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
+        dictationItem.image = NSImage(systemSymbolName: "phone.fill", accessibilityDescription: nil)
 
         menu.addItem(dictationItem)
 
@@ -773,9 +773,6 @@ extension AppDelegate {
         ClipboardKitConfig.storageFolderName = "Clippy-Screenshots/" + UUID().uuidString
         let demoDirectory = ClipboardItem.storageDirectoryURL
         let manager = ClipboardManager.shared
-        ["See you tomorrow at 10:00 ☕", "A little less searching. A little more doing.",
-         "https://github.com/mmkontis/clippy-macos", "Shopping list: coffee, apples, fresh bread",
-         "Your next great idea starts here."].forEach { manager.addItem(.fromText($0, source: "Notes")) }
         NSApp.setActivationPolicy(.regular)
         NSApp.appearance = NSAppearance(named: .aqua)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
@@ -783,18 +780,66 @@ extension AppDelegate {
         window.isReleasedWhenClosed = false
         self.panelWindow = window
         let captures = [
-            ("01-history.png", "Copy once.\nFind it whenever.", "Your clipboard, with a memory."),
-            ("02-search.png", "Find that thing\nyou copied.", "Search your history in a moment.")
+            ("01-history.png", "Good ideas.\nAlways on hand.", "Everything you copy, ready when you need it.", "⌘ ⇧ V   Open your clipboard"),
+            ("02-search.png", "Less searching.\nMore finding.", "A word is all it takes to find that thing.", "Search notes, links and more"),
+            ("03-images.png", "More than\njust words.", "Keep your images and files close, too.", "Text, images and files together"),
+            ("04-coworker.png", "A little help\nfrom your voice.", "Meet Coworker. An optional companion\nfor typing with your voice.", "Your clipboard needs no account")
         ]
         try? FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        func seed(_ index: Int) {
+            manager.clearHistory()
+            let examples: [(String, String)]
+            switch index {
+            case 1:
+                examples = [
+                    ("Coffee catch-up with Alex, Friday at 10", "Calendar"),
+                    ("https://example.com/coffee-guide", "Safari"),
+                    ("Weekend list: coffee, apples, fresh bread", "Notes"),
+                    ("Send the project outline on Monday", "Reminders")
+                ]
+            case 2:
+                examples = [("Logo ideas for the next big thing", "Notes"), ("Brand palette: #2563EB · #38BDF8", "Notes")]
+            case 3:
+                examples = [
+                    ("Thanks for the feedback. I’ll send an update today.", "Mail"),
+                    ("Let’s meet tomorrow at 10. Coffee is on me!", "Messages"),
+                    ("Three ideas for our next launch", "Notes"),
+                    ("Remember to book the meeting room", "Reminders"),
+                    ("A little less searching. A little more doing.", "Notes")
+                ]
+            default:
+                examples = [
+                    ("Your next great idea starts here.", "Notes"),
+                    ("Shopping list: coffee, apples, fresh bread", "Notes"),
+                    ("https://github.com/mmkontis/clippy-macos", "Safari"),
+                    ("The launch checklist is ready to share", "Messages"),
+                    ("Design review, Thursday at 14:00", "Calendar"),
+                    ("#2563EB. That’s the blue!", "Notes"),
+                    ("Thanks! I’ll take a look this afternoon.", "Mail"),
+                    ("See you tomorrow at 10:00 ☕", "Messages")
+                ]
+            }
+            for (text, source) in examples.reversed() {
+                manager.addItem(.fromText(text, source: source))
+            }
+            if index == 2 {
+                let sampleFile = demoDirectory.appendingPathComponent("Launch notes.txt")
+                try? "A fresh start. A bright blue palette. A little less searching.".write(to: sampleFile, atomically: true, encoding: .utf8)
+                manager.addItem(.fromFileURL(sampleFile, source: "Finder"))
+                if let logo = NSImage(named: "ClippyLogo"), let item = ClipboardItem.fromImage(logo, source: "Preview") {
+                    manager.addItem(item)
+                }
+            }
+        }
         func render(_ index: Int) {
             guard index < captures.count else {
                 try? FileManager.default.removeItem(at: demoDirectory)
                 NSApp.terminate(nil)
                 return
             }
+            seed(index)
             let entry = captures[index]
-            let view = ListingScreenshot(title: entry.1, subtitle: entry.2, manager: manager)
+            let view = ListingScreenshot(title: entry.1, subtitle: entry.2, detail: entry.3, index: index, manager: manager)
             let hosting = NSHostingView(rootView: view)
             hosting.frame = NSRect(x: 0, y: 0, width: 1280, height: 800)
             window.contentView = hosting
@@ -802,7 +847,7 @@ extension AppDelegate {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                manager.searchQuery = index == 1 ? "idea" : ""
+                manager.searchQuery = index == 1 ? "coffee" : ""
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     hosting.layoutSubtreeIfNeeded()
                     if let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
@@ -821,20 +866,47 @@ extension AppDelegate {
 private struct ListingScreenshot: View {
     let title: String
     let subtitle: String
+    let detail: String
+    let index: Int
     @ObservedObject var manager: ClipboardManager
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.94, green: 0.97, blue: 1), Color(red: 0.80, green: 0.88, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            HStack(spacing: 90) {
-                VStack(alignment: .leading, spacing: 24) {
-                    Label("Clippy", systemImage: "clipboard.fill").font(.system(size: 30, weight: .bold)).foregroundStyle(.blue)
-                    Text(title).font(.system(size: 54, weight: .bold, design: .rounded)).tracking(-1.5)
-                    Text(subtitle).font(.system(size: 22)).foregroundStyle(.secondary)
-                    Text("Free. Open source. No account.").font(.system(size: 17, weight: .medium)).padding(.top, 14)
+            Color(red: 0.97, green: 0.98, blue: 1)
+            RadialGradient(colors: [Color(red: 0.64, green: 0.86, blue: 1), .clear], center: .trailing, startRadius: 40, endRadius: 740)
+            RadialGradient(colors: [Color(red: 1, green: 0.90, blue: 0.80).opacity(0.7), .clear], center: .topLeading, startRadius: 0, endRadius: 530)
+            Circle().stroke(CoworkerBrand.blue.opacity(0.09), lineWidth: 1.5)
+                .frame(width: 780, height: 780).offset(x: 420, y: 180)
+            Circle().stroke(CoworkerBrand.blue.opacity(0.07), lineWidth: 1.5)
+                .frame(width: 950, height: 950).offset(x: 420, y: 180)
+            RoundedRectangle(cornerRadius: 100)
+                .fill(LinearGradient(colors: [CoworkerBrand.blue.opacity(0.14), Color.cyan.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 500, height: 590).rotationEffect(.degrees(index % 2 == 0 ? 10 : -10)).offset(x: 340, y: 35)
+            HStack(spacing: 72) {
+                VStack(alignment: .leading, spacing: 26) {
+                    HStack(spacing: 16) {
+                        Image("ClippyLogo").resizable().frame(width: 78, height: 78)
+                            .clipShape(RoundedRectangle(cornerRadius: 19))
+                            .shadow(color: CoworkerBrand.blue.opacity(0.18), radius: 14, y: 7)
+                        Text("Clippy").font(.system(size: 34, weight: .bold, design: .rounded)).foregroundStyle(CoworkerBrand.blue)
+                    }
+                    .padding(.bottom, 12)
+                    Text(title).font(.system(size: 55, weight: .bold, design: .rounded))
+                        .tracking(-1.8).lineSpacing(0).fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(Color(red: 0.06, green: 0.12, blue: 0.25))
+                    Text(subtitle).font(.system(size: 22)).lineSpacing(5)
+                        .foregroundStyle(Color(red: 0.29, green: 0.36, blue: 0.47))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detail).font(.system(size: 15, weight: .semibold)).foregroundStyle(CoworkerBrand.blue)
+                        .padding(.horizontal, 18).padding(.vertical, 12)
+                        .background(.white.opacity(0.85), in: Capsule())
+                    Text("FREE  ·  OPEN SOURCE  ·  MADE FOR MAC")
+                        .font(.system(size: 12, weight: .semibold)).tracking(1.4)
+                        .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.53)).padding(.top, 10)
                 }.frame(width: 490, alignment: .leading)
-                ClipboardPanel(clipboardManager: manager, isPresented: .constant(true))
-            }.padding(80)
-        }.frame(width: 1280, height: 800).environment(\.colorScheme, .light)
+                ClipboardPanel(clipboardManager: manager, isPresented: .constant(true), promotionOverride: index == 3)
+                    .scaleEffect(1.15).frame(width: 483, height: 552)
+            }.padding(.horizontal, 72)
+        }.frame(width: 1280, height: 800).clipped().environment(\.colorScheme, .light)
     }
 }
 #endif

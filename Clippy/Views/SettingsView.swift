@@ -437,17 +437,17 @@ struct SettingsView: View {
     private var dictationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Label("Dictation", systemImage: "mic.fill")
+                Label("Dictation", systemImage: "phone.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.blue)
+                    .foregroundColor(CoworkerBrand.blue)
                 DictationNewBadge()
             }
 
             HStack(spacing: 16) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Image(systemName: "mic.fill")
+                        .fill(CoworkerBrand.blue)
+                    Image(systemName: "phone.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
                 }
@@ -463,11 +463,11 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button("Download...") {
+                Button("Get free") {
                     DictationPromo.shared.openDownloadPage()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.blue)
+                .tint(CoworkerBrand.blue)
                 .controlSize(.small)
                 .fixedSize()
             }

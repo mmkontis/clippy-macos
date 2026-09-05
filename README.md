@@ -6,7 +6,12 @@
 
 **Installer status:** Apple signing is pending. The releases page currently offers source code, not a ready-to-install Mac download.
 
-<p align="center"><img src="app-store/screenshots/01-history.png" alt="Clippy clipboard history with sample entries" width="900"></p>
+<p align="center"><img src="app-store/screenshots/01-history.png" alt="Clippy. Your copied notes and links in a bright, readable clipboard panel." width="900"></p>
+<p align="center">
+  <img src="app-store/screenshots/02-search.png" alt="Find coffee notes and links with one search." width="290">
+  <img src="app-store/screenshots/03-images.png" alt="Keep copied images, files and text together." width="290">
+  <img src="app-store/screenshots/04-coworker.png" alt="Optional Coworker voice companion with a Get free button." width="290">
+</p>
 
 ### Copy. Find. Reuse.
 
