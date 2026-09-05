@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/clippy.png" width="112" alt="Clippy logo"></p>
+<p align="center"><img src="docs/assets/clippy-wordmark.png" width="270" alt="Clippy"></p>
 <h1 align="center">Your clipboard, with a memory.</h1>
 <p align="center">Find the text, images, and files you copied. Get back to doing.</p>
 <p align="center"><strong>Free · Open source · No account · macOS 14+</strong></p>
@@ -12,6 +12,8 @@
   <img src="app-store/screenshots/03-images.png" alt="Keep copied images, files and text together." width="290">
   <img src="app-store/screenshots/04-coworker.png" alt="Optional Coworker voice companion with a Get free button." width="290">
 </p>
+
+<p align="center"><img src="app-store/screenshots/05-media-bar.png" alt="Clippy’s floating media bar keeps copied images and files within reach." width="900"></p>
 
 ### Copy. Find. Reuse.
 

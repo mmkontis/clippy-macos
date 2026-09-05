@@ -41,15 +41,14 @@ struct MediaBarView: View {
                     .frame(minHeight: 100, alignment: .bottom)
                 }
                 .background(
-                    VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                        .opacity(0.92)
+                    Color(nsColor: .windowBackgroundColor)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(0.35), radius: 16, x: 0, y: 6)
+                .shadow(color: .black.opacity(0.16), radius: 16, x: 0, y: 6)
                 .onKeyPress(.leftArrow) {
                     navigate(offset: -1, scrollProxy: scrollProxy)
                     return .handled

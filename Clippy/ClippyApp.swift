@@ -786,7 +786,8 @@ extension AppDelegate {
             ("01-history.png", "Good ideas.\nAlways on hand.", "Everything you copy, ready when you need it.", "⌘ ⇧ V   Open your clipboard"),
             ("02-search.png", "Less searching.\nMore finding.", "A word is all it takes to find that thing.", "Search notes, links and more"),
             ("03-images.png", "More than\njust words.", "Keep your images and files close, too.", "Text, images and files together"),
-            ("04-coworker.png", "A little help\nfrom your voice.", "Meet Coworker. An optional companion\nfor typing with your voice.", "Your clipboard needs no account")
+            ("04-coworker.png", "A little help\nfrom your voice.", "Meet Coworker. An optional companion\nfor typing with your voice.", "Your clipboard needs no account"),
+            ("05-media-bar.png", "Your files.\nWithin reach.", "A floating shelf for the images\nand files you copy.", "Enable Show Media Bar in Settings")
         ]
         try? FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         func seed(_ index: Int) {
@@ -825,10 +826,24 @@ extension AppDelegate {
             for (text, source) in examples.reversed() {
                 manager.addItem(.fromText(text, source: source))
             }
-            if index == 2 {
+            if index == 2 || index == 4 {
                 let sampleFile = demoDirectory.appendingPathComponent("Launch notes.txt")
                 try? "A fresh start. A bright blue palette. A little less searching.".write(to: sampleFile, atomically: true, encoding: .utf8)
                 manager.addItem(.fromFileURL(sampleFile, source: "Finder"))
+                if index == 4 {
+                    let samplePDF = demoDirectory.appendingPathComponent("Project brief.pdf")
+                    let page = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 500))
+                    let label = NSTextField(wrappingLabelWithString: "PROJECT BRIEF\n\nA bright start.\n\nIdeas, images and notes for our next launch.")
+                    label.font = .systemFont(ofSize: 28, weight: .semibold)
+                    label.textColor = .systemBlue
+                    label.frame = NSRect(x: 32, y: 80, width: 336, height: 370)
+                    page.addSubview(label)
+                    try? page.dataWithPDF(inside: page.bounds).write(to: samplePDF)
+                    manager.addItem(.fromFileURL(samplePDF, source: "Finder"))
+                    if let logo = NSImage(named: "CoworkerLogo"), let item = ClipboardItem.fromImage(logo, source: "Preview") {
+                        manager.addItem(item)
+                    }
+                }
                 if let logo = NSImage(named: "ClippyLogo"), let item = ClipboardItem.fromImage(logo, source: "Preview") {
                     manager.addItem(item)
                 }
@@ -836,6 +851,15 @@ extension AppDelegate {
         }
         func render(_ index: Int) {
             guard index < captures.count else {
+                let wordmark = NSHostingView(rootView: ClippyListingWordmark().padding(20))
+                wordmark.frame = NSRect(x: 0, y: 0, width: 270, height: 118)
+                window.contentView = wordmark
+                window.setContentSize(NSSize(width: 270, height: 118))
+                wordmark.layoutSubtreeIfNeeded()
+                if let bitmap = wordmark.bitmapImageRepForCachingDisplay(in: wordmark.bounds) {
+                    wordmark.cacheDisplay(in: wordmark.bounds, to: bitmap)
+                    try? bitmap.representation(using: .png, properties: [:])?.write(to: output.appendingPathComponent("clippy-wordmark.png"))
+                }
                 try? FileManager.default.removeItem(at: demoDirectory)
                 NSApp.terminate(nil)
                 return
@@ -866,6 +890,16 @@ extension AppDelegate {
         render(0)
     }
 }
+private struct ClippyListingWordmark: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Image("ClippyLogo").resizable().frame(width: 78, height: 78)
+                .clipShape(RoundedRectangle(cornerRadius: 19))
+            Text("Clippy").font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(CoworkerBrand.blue)
+        }
+    }
+}
 private struct ListingScreenshot: View {
     let title: String
     let subtitle: String
@@ -886,12 +920,7 @@ private struct ListingScreenshot: View {
                 .frame(width: 500, height: 590).rotationEffect(.degrees(index % 2 == 0 ? 10 : -10)).offset(x: 340, y: 35)
             HStack(spacing: 72) {
                 VStack(alignment: .leading, spacing: 26) {
-                    HStack(spacing: 16) {
-                        Image("ClippyLogo").resizable().frame(width: 78, height: 78)
-                            .clipShape(RoundedRectangle(cornerRadius: 19))
-                            .shadow(color: CoworkerBrand.blue.opacity(0.18), radius: 14, y: 7)
-                        Text("Clippy").font(.system(size: 34, weight: .bold, design: .rounded)).foregroundStyle(CoworkerBrand.blue)
-                    }
+                    ClippyListingWordmark()
                     .padding(.bottom, 12)
                     Text(title).font(.system(size: 55, weight: .bold, design: .rounded))
                         .tracking(-1.8).lineSpacing(0).fixedSize(horizontal: false, vertical: true)
@@ -907,8 +936,12 @@ private struct ListingScreenshot: View {
                         .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.53)).padding(.top, 10)
                 }.frame(width: 490, alignment: .leading)
                 ClipboardPanel(clipboardManager: manager, isPresented: .constant(true), promotionOverride: index == 3)
-                    .scaleEffect(1.15).frame(width: 483, height: 552)
-            }.padding(.horizontal, 72)
+                    .scaleEffect(index == 4 ? 0.95 : 1.15).frame(width: 483, height: 552)
+            }.padding(.horizontal, 72).offset(y: index == 4 ? -65 : 0)
+            if index == 4 {
+                MediaBarView(clipboardManager: manager, screenWidth: 1000)
+                    .frame(width: 1000, height: 140).position(x: 640, y: 750)
+            }
         }.frame(width: 1280, height: 800).clipped().environment(\.colorScheme, .light)
     }
 }
