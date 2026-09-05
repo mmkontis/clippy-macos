@@ -1,0 +1,17 @@
+name: Build and test macOS
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test clipboard privacy and streaming
+        run: bash scripts/test.sh
+      - name: Build Apple Silicon and Intel
+        run: >-
+          xcodebuild -project Clippy.xcodeproj -scheme Clippy
+          -configuration Release -derivedDataPath build
+          -destination 'generic/platform=macOS'
+          'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build

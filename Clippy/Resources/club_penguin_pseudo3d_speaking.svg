@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 750" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bodyGrad" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#66D9FF" />
+      <stop offset="50%" stop-color="#00BFFF" />
+      <stop offset="100%" stop-color="#0077CC" />
+    </radialGradient>
+
+    <radialGradient id="bellyGrad" cx="40%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="70%" stop-color="#F5F5F5" />
+      <stop offset="100%" stop-color="#C0C0C0" />
+    </radialGradient>
+
+    <linearGradient id="beakGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE033" />
+      <stop offset="50%" stop-color="#FFB300" />
+      <stop offset="100%" stop-color="#E67A00" />
+    </linearGradient>
+
+    <radialGradient id="beakShadow" cx="50%" cy="50%" r="50%" fx="50%" fy="90%">
+      <stop offset="70%" stop-color="#FFB300" stop-opacity="0" />
+      <stop offset="100%" stop-color="#B35900" stop-opacity="0.6" />
+    </radialGradient>
+
+    <linearGradient id="footGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFD11A" />
+      <stop offset="100%" stop-color="#FF9900" />
+    </linearGradient>
+
+    <linearGradient id="footSideGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF9900" />
+      <stop offset="100%" stop-color="#CC6600" />
+    </linearGradient>
+
+    <linearGradient id="flipperLeftGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00BFFF" />
+      <stop offset="100%" stop-color="#0077CC" />
+    </linearGradient>
+
+    <linearGradient id="flipperRightGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00BFFF" />
+      <stop offset="100%" stop-color="#0077CC" />
+    </linearGradient>
+  </defs>
+
+  <!-- Feet (Static) -->
+  <g>
+    <path d="M 230 600 L 230 640 C 230 680, 350 680, 350 640 L 350 600 Z" fill="url(#footSideGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+    <path d="M 230 600 C 230 570, 350 570, 350 600 C 350 630, 230 630, 230 600 Z" fill="url(#footGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+  </g>
+  <g>
+    <path d="M 400 600 L 400 640 C 400 680, 520 680, 520 640 L 520 600 Z" fill="url(#footSideGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+    <path d="M 400 600 C 400 570, 520 570, 520 600 C 520 630, 400 630, 400 600 Z" fill="url(#footGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+  </g>
+
+  <!-- GLOBAL BREATHING BODY GROUP -->
+  <g>
+    <animateTransform attributeName="transform" type="translate" values="0,0; 0,-4; 0,0" dur="3s" repeatCount="indefinite" />
+
+    <!-- LAYER 1: Body & Flippers (Furthest, moves the least) -->
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="-4,0; 4,0; -4,0" dur="8s" repeatCount="indefinite" />
+      
+      <!-- Left Flipper -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="0 220 420; 5 220 420; 0 220 420; -5 220 420; 0 220 420" dur="4s" repeatCount="indefinite" />
+        <path d="M 170 340 C 30 400, 30 520, 80 560 C 120 590, 180 480, 220 420 Z" fill="url(#flipperLeftGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+      </g>
+
+      <!-- Right Flipper -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="0 530 420; -5 530 420; 0 530 420; 5 530 420; 0 530 420" dur="4s" repeatCount="indefinite" />
+        <path d="M 580 340 C 720 400, 720 520, 670 560 C 630 590, 570 480, 530 420 Z" fill="url(#flipperRightGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+      </g>
+
+      <!-- Body -->
+      <ellipse cx="375" cy="380" rx="280" ry="260" fill="url(#bodyGrad)" stroke="#000000" stroke-width="10" />
+    </g>
+
+    <!-- LAYER 2: Belly (Mid-back, moves slightly more) -->
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="-8,0; 8,0; -8,0" dur="8s" repeatCount="indefinite" />
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,0; 0,-2; 0,0" dur="3s" repeatCount="indefinite" />
+        <ellipse cx="375" cy="460" rx="180" ry="160" fill="url(#bellyGrad)" stroke="#000000" stroke-width="10" />
+      </g>
+    </g>
+
+    <!-- LAYER 3: Eyes Background and Eyes (Mid-front, moves more) -->
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="-18,0; 18,0; -18,0" dur="8s" repeatCount="indefinite" />
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,0; 0,-5; 0,0" dur="3s" repeatCount="indefinite" />
+        
+        <!-- Eyes Background -->
+        <path d="M 375 220
+                 C 310 180, 230 200, 240 310
+                 C 250 380, 320 380, 375 360
+                 C 430 380, 500 380, 510 310
+                 C 520 200, 440 180, 375 220 Z"
+              fill="#FFFFFF" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+
+        <!-- Left Pupil (With Blink) -->
+        <ellipse cx="310" cy="310" rx="25" ry="35" fill="#000000">
+          <animate attributeName="ry" values="35; 2; 35; 35" keyTimes="0; 0.03; 0.06; 1" dur="5s" repeatCount="indefinite" />
+        </ellipse>
+        <circle cx="315" cy="295" r="12" fill="#FFFFFF">
+          <animate attributeName="r" values="12; 0; 12; 12" keyTimes="0; 0.03; 0.06; 1" dur="5s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="295" cy="325" r="5" fill="#FFFFFF">
+          <animate attributeName="r" values="5; 0; 5; 5" keyTimes="0; 0.03; 0.06; 1" dur="5s" repeatCount="indefinite" />
+        </circle>
+
+        <!-- Right Pupil (With Blink) -->
+        <ellipse cx="440" cy="310" rx="25" ry="35" fill="#000000">
+          <animate attributeName="ry" values="35; 2; 35; 35" keyTimes="0; 0.03; 0.06; 1" dur="5s" repeatCount="indefinite" />
+        </ellipse>
+        <circle cx="445" cy="295" r="12" fill="#FFFFFF">
+          <animate attributeName="r" values="12; 0; 12; 12" keyTimes="0; 0.03; 0.06; 1" dur="5s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="425" cy="325" r="5" fill="#FFFFFF">
+          <animate attributeName="r" values="5; 0; 5; 5" keyTimes="0; 0.03; 0.06; 1" dur="5s" repeatCount="indefinite" />
+        </circle>
+      </g>
+    </g>
+
+    <!-- LAYER 4: Beak and Smile (Closest, moves the most) -->
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="-28,0; 28,0; -28,0" dur="8s" repeatCount="indefinite" />
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,0; 0,-8; 0,0" dur="3s" repeatCount="indefinite" />
+        
+        <!-- Beak -->
+        <path d="M 280 370
+                 C 300 330, 450 330, 470 370
+                 C 490 440, 420 460, 375 460
+                 C 330 460, 260 440, 280 370 Z"
+              fill="url(#beakGrad)" stroke="#000000" stroke-width="10" stroke-linejoin="round" />
+        <path d="M 280 370 C 300 330, 450 330, 470 370 C 490 440, 420 460, 375 460 C 330 460, 260 440, 280 370 Z" fill="url(#beakShadow)" stroke="none" />
+        <path d="M 320 355 C 340 350, 410 350, 430 355" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.8" />
+
+        <!-- Animated Talking Mouth -->
+        <path fill="#FF6699" stroke="#000000" stroke-width="8" stroke-linejoin="round">
+          <animate attributeName="d" 
+            values="M 350 400 Q 375 410 400 400 Z; 
+                    M 350 400 Q 375 460 400 400 Z; 
+                    M 350 400 Q 375 420 400 400 Z;
+                    M 350 400 Q 375 450 400 400 Z;
+                    M 350 400 Q 375 410 400 400 Z" 
+            dur="0.6s" repeatCount="indefinite" />
+        </path>
+        <!-- Top line of mouth -->
+        <path d="M 350 400 L 400 400" fill="none" stroke="#000000" stroke-width="8" stroke-linecap="round" />
+      </g>
+    </g>
+  </g>
+</svg>

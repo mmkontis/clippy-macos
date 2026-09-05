@@ -1,0 +1,17 @@
+build/
+build-*/
+release/
+.cursor/
+.history/
+.vscode/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+.build/
+.swiftpm/
+.env
+.env.*
+*.p12
+*.p8
+*.pem
