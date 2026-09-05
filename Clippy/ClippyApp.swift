@@ -154,7 +154,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let dictationItem = NSMenuItem(title: "Get Coworker Dictation", action: #selector(openDictationMode), keyEquivalent: "")
         dictationItem.target = self
-        dictationItem.image = NSImage(systemSymbolName: "phone.fill", accessibilityDescription: nil)
+        if let logo = NSImage(named: "CoworkerLogo")?.copy() as? NSImage {
+            logo.size = NSSize(width: 18, height: 18)
+            dictationItem.image = logo
+        }
 
         menu.addItem(dictationItem)
 

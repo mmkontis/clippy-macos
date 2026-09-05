@@ -15,3 +15,13 @@ Version 1.2.0, build 8 is prepared for direct Mac distribution. A successful loc
 Direct download: repeat Developer ID signing and automated notarization for every release. Sparkle delivers updates. Full Mac App Store review is not part of this route.
 
 Mac App Store: the `ClippyStore` target is sandboxed, excludes Sparkle, and uses manual paste. `scripts/archive-app-store.sh` requires the verified team, provisioning profile, and App Group. Signed sandbox testing and App Review remain required. Both Store and companion builds need the same authorized App Group before their histories can combine. Listing copy and native screenshot drafts are in `app-store/`.
+
+## Signing keys and backups
+
+Keep the existing Sparkle EdDSA private key in macOS Keychain. Its public key in `Info.plist` is intentionally public and is safe in source control. Confirm that `generate_keys -p` matches `SUPublicEDKey` before signing. Never generate a new key for an ordinary update.
+
+Keep an encrypted backup of the Sparkle private key and a password-protected export of each Apple release certificate with its private key (.p12). Store a recovery copy in a trusted password manager or encrypted offline storage, separately from this Mac. A certificate or CSR alone cannot replace a lost private key. Do not put private keys, .p12 files, notarization passwords, or API keys in Git, the website, DMGs, release assets, logs, or chat. No private-key backup was exported by this task.
+
+Sparkle supports exporting an existing key with `generate_keys -x /secure/destination/key` and importing with `-f`. That export is plaintext: only use a destination inside encrypted storage and do not leave a loose temporary copy. Back up Apple identities through Keychain Access or Xcode with a strong export password. Test recovery on a separate authorized Mac before relying on the backup. If keys must change, follow Sparkle's documented rotation process; do not change both trust mechanisms in one update.
+
+The website hosts the public feed and installers only. Signing secrets stay on the release Mac or in explicitly configured CI secret storage. In the Humanlike workspace, `Humanlike-next/scripts/prepare-clippy-update.py` verifies the notarized DMG, existing Sparkle key, and actual public download before updating the feed and website download manifest together. See `Humanlike-next/docs/clippy-updates.md` for the command.

@@ -437,21 +437,18 @@ struct SettingsView: View {
     private var dictationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Label("Dictation", systemImage: "phone.fill")
+                Text("Coworker")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(CoworkerBrand.blue)
                 DictationNewBadge()
             }
 
             HStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(CoworkerBrand.blue)
-                    Image(systemName: "phone.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 44, height: 44)
+                Image("CoworkerLogo")
+                    .resizable()
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .accessibilityLabel("Coworker")
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Type with your voice")

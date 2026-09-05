@@ -508,14 +508,11 @@ struct DictationBanner: View {
 
     var body: some View {
         HStack(spacing: 11) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(CoworkerBrand.blue)
-                Image(systemName: "phone.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 34, height: 34)
+            Image("CoworkerLogo")
+                .resizable()
+                .frame(width: 34, height: 34)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .accessibilityLabel("Coworker")
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {

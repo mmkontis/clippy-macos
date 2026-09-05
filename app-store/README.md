@@ -12,4 +12,4 @@ The `ClippyStore` target excludes Sparkle, uses Apple's sandbox and manual paste
 
 Remaining: approve creation of release certificates and the shared App Group, provision and test signed builds, upload the Store package, complete privacy and age-rating answers, select availability, and complete account compliance where Apple requires it. The direct-download installer additionally needs notarization authentication.
 
-The screenshots use the original Clippy logo, Coworker blue (#2563EB), and a light panel. History, search, and images/files have no promotion; only the fourth image shows the optional Coworker banner. Recreate them with a Debug ClippyStore build and `Clippy.app/Contents/MacOS/Clippy --capture-listing /absolute/output/directory`.
+The screenshots use the original Clippy logo, Coworker blue (#2563EB), and a light panel. History, search, and images/files have no promotion; only the fourth image shows the optional Coworker banner with its original logo. Recreate them with a Debug ClippyStore build and `Clippy.app/Contents/MacOS/Clippy --capture-listing /absolute/output/directory`.
