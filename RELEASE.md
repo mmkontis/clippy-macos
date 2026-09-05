@@ -20,8 +20,14 @@ Mac App Store: the `ClippyStore` target is sandboxed, excludes Sparkle, and uses
 
 Keep the existing Sparkle EdDSA private key in macOS Keychain. Its public key in `Info.plist` is intentionally public and is safe in source control. Confirm that `generate_keys -p` matches `SUPublicEDKey` before signing. Never generate a new key for an ordinary update.
 
-Keep an encrypted backup of the Sparkle private key and a password-protected export of each Apple release certificate with its private key (.p12). Store a recovery copy in a trusted password manager or encrypted offline storage, separately from this Mac. A certificate or CSR alone cannot replace a lost private key. Do not put private keys, .p12 files, notarization passwords, or API keys in Git, the website, DMGs, release assets, logs, or chat. No private-key backup was exported by this task.
+Keep an encrypted backup of the Sparkle private key and a password-protected export of each Apple release certificate with its private key (.p12). Store a recovery copy in a trusted password manager or encrypted offline storage, separately from this Mac. A certificate or CSR alone cannot replace a lost private key. Do not put private keys, .p12 files, notarization passwords, or API keys in Git, the website, DMGs, release assets, logs, or chat. Never commit unencrypted exports. Encrypted backup storage and its recovery password must be kept separate.
 
 Sparkle supports exporting an existing key with `generate_keys -x /secure/destination/key` and importing with `-f`. That export is plaintext: only use a destination inside encrypted storage and do not leave a loose temporary copy. Back up Apple identities through Keychain Access or Xcode with a strong export password. Test recovery on a separate authorized Mac before relying on the backup. If keys must change, follow Sparkle's documented rotation process; do not change both trust mechanisms in one update.
 
 The website hosts the public feed and installers only. Signing secrets stay on the release Mac or in explicitly configured CI secret storage. In the Humanlike workspace, `Humanlike-next/scripts/prepare-clippy-update.py` verifies the notarized DMG, existing Sparkle key, and actual public download before updating the feed and website download manifest together. See `Humanlike-next/docs/clippy-updates.md` for the command.
+
+## Store preparation status
+
+The `ClippyStore` target uses the registered `group.ai.univation.clipboard` App Group. The Apple Distribution and Mac Installer Distribution certificates were issued for Univation, and profile `Clippy Mac App Store 2026` was generated on September 6, 2026. A universal version 1.2.0 (build 8) archive and installer passed local signature, sandbox entitlement, App Group, and Sparkle exclusion checks.
+
+The Store draft contains five screenshots, including the native media bar. This is not a published release. Upload requires an Xcode account with App Store Connect access. Content rights, age rating, app privacy, reviewer contact completion, and signed runtime validation must be finished before submission.
