@@ -80,7 +80,8 @@ struct AIPanel: View {
         }
         .padding(16)
         .frame(width: 520, height: 380)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .background(ClippySurfaceBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.1)))
         .onAppear { isInputFocused = true }
         .onKeyPress(.escape) {

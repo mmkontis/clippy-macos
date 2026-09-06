@@ -41,7 +41,7 @@ struct MediaBarView: View {
                     .frame(minHeight: 100, alignment: .bottom)
                 }
                 .background(
-                    Color(nsColor: .windowBackgroundColor)
+                    ClippySurfaceBackground()
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(

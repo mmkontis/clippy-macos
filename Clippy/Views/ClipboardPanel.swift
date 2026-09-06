@@ -48,7 +48,7 @@ struct ClipboardPanel: View {
             footerView
         }
         .frame(width: 420, height: 480)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(ClippySurfaceBackground())
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)

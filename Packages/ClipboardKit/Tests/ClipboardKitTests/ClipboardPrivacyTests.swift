@@ -29,7 +29,7 @@ final class ClipboardPrivacyTests: XCTestCase {
         ClipboardKitConfig.maximumHistoryItems = { 1 }
         manager.enforceHistoryLimit()
         XCTAssertEqual(manager.items.count, 1)
-        ClipboardKitConfig.maximumHistoryItems = { 400 }
+        ClipboardKitConfig.maximumHistoryItems = { 1_000 }
         manager.clearHistory()
         XCTAssertTrue(manager.items.isEmpty)
         let data = try Data(contentsOf: storage.appendingPathComponent("history.json"))

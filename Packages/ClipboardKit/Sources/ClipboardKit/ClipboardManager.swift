@@ -76,7 +76,7 @@ public final class ClipboardManager: ObservableObject {
     public func refreshSharedHistory() {
         guard let sharedStore else { return }
         do {
-            let snapshot = try sharedStore.snapshot(limit: 400)
+            let snapshot = try sharedStore.snapshot(limit: SharedClipboardStore.retentionLimit)
             if snapshot.revision != lastSharedRevision || lastSharedLimit != maxItems {
                 items = Array(snapshot.items.prefix(maxItems))
                 ClipboardUsageTracker.shared.retainHistory(snapshot.items)

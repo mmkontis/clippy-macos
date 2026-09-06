@@ -44,6 +44,38 @@ final class SharedClipboardStoreTests: XCTestCase {
         XCTAssertEqual(try first.snapshot(limit: 400).items.count, 80, "A smaller view must not truncate shared history")
     }
 
+    func testThousandClipsSurviveSmallerViewsAndPruneOnlyOldest() throws {
+        let clippy = try store(), coworker = try store()
+        for i in 0...1_000 {
+            try (i.isMultiple(of: 2) ? clippy : coworker).upsert(
+                ClipboardItem(contentType: .text, timestamp: Date(timeIntervalSince1970: Double(i)),
+                              textContent: "clip \(i)"))
+        }
+        XCTAssertEqual(try clippy.snapshot(limit: 500).items.count, 500)
+        let retained = try coworker.snapshot(limit: 2_000).items
+        XCTAssertEqual(retained.count, 1_000)
+        XCTAssertEqual(retained.first?.textContent, "clip 1000")
+        XCTAssertEqual(retained.last?.textContent, "clip 1")
+        XCTAssertEqual(try clippy.snapshot(limit: 1_000).items.map(\.id), retained.map(\.id))
+    }
+
+    func testLegacyImportUsesSameThousandClipRetention() throws {
+        let shared = try store()
+        let legacy = root.appendingPathComponent("legacy")
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        let items = (0...1_000).map {
+            ClipboardItem(contentType: .text, timestamp: Date(timeIntervalSince1970: Double($0)),
+                          textContent: "legacy \($0)")
+        }
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(items).write(to: legacy.appendingPathComponent("history.json"))
+        try shared.importLegacy(directory: legacy, identifier: "clippy")
+        let retained = try shared.snapshot(limit: 2_000).items
+        XCTAssertEqual(retained.count, 1_000)
+        XCTAssertEqual(retained.first?.textContent, "legacy 1000")
+        XCTAssertEqual(retained.last?.textContent, "legacy 1")
+    }
+
     func testLegacyImportsAreAtomicAndNeverResurrectClearedHistory() throws {
         let shared = try store()
         let legacy = root.appendingPathComponent("legacy")

@@ -14,6 +14,9 @@ struct SettingsView: View {
     @State private var showResetConfirmation = false
     @State private var openAIKey = ""
     @State private var keyStatus = ""
+    @State private var hasSavedKey = false
+    @State private var savedKeyMask = "sk-proj-••••••••••••"
+    @State private var connectAfterProviderChange = false
     @AppStorage("textAIProvider") private var textAIProvider = AIProvider.none.rawValue
     @AppStorage("openAITextModel") private var openAITextModel = "gpt-5.4-mini"
     @AppStorage("chatGPTTextModel") private var chatGPTTextModel = ""
@@ -74,8 +77,9 @@ struct SettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .windowBackgroundColor))
+
         }
+        .background(ClippySurfaceBackground())
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 800, minHeight: 580)
         .tint(CoworkerBrand.blue)
@@ -128,7 +132,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 24)
         .frame(width: 204)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(settings.theme == .solid ? 1 : 0.35))
     }
 
     @ViewBuilder private func sectionContent(_ section: SettingsPage) -> some View {
@@ -153,6 +157,7 @@ struct SettingsView: View {
                 settingsToggle("Dismiss recent tiles after paste", detail: "Clips remain in your history.", value: $settings.dismissRecentOnPaste)
             }
             card { historySection }
+            card { appearanceSection }
             #if !APP_STORE
             card { permissionsSection }
             #endif
@@ -160,10 +165,11 @@ struct SettingsView: View {
             card { hotkeySection }
         case .textAI:
             card { cloudAISection }
-        case .companion:
-            card { penguinSection }
         case .about:
             card { aboutSection }
+            card {
+                DisclosureGroup("Companion") { penguinSection.padding(.top, 12) }
+            }
             card { resetSection }
         }
     }
@@ -172,7 +178,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(22)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color(nsColor: .controlBackgroundColor).opacity(settings.theme == .solid ? 1 : 0.45), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.05)))
     }
 
@@ -190,54 +196,48 @@ struct SettingsView: View {
     private var cloudAISection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Your connection").font(.headline)
-            Picker("Use AI with", selection: $textAIProvider) {
-                ForEach(AIProvider.allCases) { provider in
-                    Text(provider.title).tag(provider.rawValue)
+            HStack {
+                Text(textAIProvider == AIProvider.none.rawValue ? "Optional. Choose how to connect." :
+                     textAIProvider == AIProvider.chatGPT.rawValue ? "Using ChatGPT" : "Using an API key")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if textAIProvider != AIProvider.none.rawValue {
+                    Button("Turn off AI") { textAIProvider = AIProvider.none.rawValue }
+                        .font(.caption)
                 }
             }
-            .onChange(of: textAIProvider) { _, value in
-                AIChatService.shared.clear()
-                modelCatalog.invalidate()
-                codexConnection.cancelLogin()
-                if value == AIProvider.chatGPT.rawValue {
-                    Task { await codexConnection.refreshAccount() }
+            Button {
+                if textAIProvider != AIProvider.chatGPT.rawValue {
+                    connectAfterProviderChange = true
+                    textAIProvider = AIProvider.chatGPT.rawValue
                 } else {
-                    codexConnection.stop()
-                    Task { await modelCatalog.refresh() }
-                }
-            }
-            if textAIProvider == AIProvider.openAI.rawValue {
-                SecureField("OpenAI API key", text: $openAIKey)
-                    .textFieldStyle(.roundedBorder)
-                HStack {
-                    Button("Save key") {
-                        let saved = OpenAICredentials.save(openAIKey)
-                        keyStatus = saved ? "Saved in Keychain." : "Couldn't save the key."
-                        openAIKey = ""
-                        if saved {
-                            aiService.clear()
-                            modelCatalog.invalidate()
-                            Task { await modelCatalog.refresh() }
-                        }
-                    }.disabled(openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button("Remove key") {
-                        AIChatService.shared.clear()
-                        let removed = OpenAICredentials.save("")
-                        keyStatus = removed ? "Key removed." : "Couldn't remove the key."
-                        openAIKey = ""
-                        if removed { modelCatalog.invalidate() }
+                    Task {
+                        if codexConnection.isConnected { await codexConnection.refreshAccount() }
+                        else { await codexConnection.connect() }
                     }
                 }
-                if !keyStatus.isEmpty { Text(keyStatus).font(.caption) }
-                Text("Uses your OpenAI API billing, separately from ChatGPT. Your key stays in Keychain.")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else if textAIProvider == AIProvider.chatGPT.rawValue {
-                if codexConnection.isConnected, let email = codexConnection.connectedEmail {
-                    Text("Connected as \(email)")
-                        .font(.callout).fontWeight(.medium)
-                        .textSelection(.enabled)
+            } label: {
+                HStack(spacing: 9) {
+                    Image("ChatGPTLogo").resizable().scaledToFit().frame(width: 20, height: 20)
+                    Text(codexConnection.isConnected && textAIProvider == AIProvider.chatGPT.rawValue
+                         ? "Connected to ChatGPT" : "Connect ChatGPT")
+                        .font(.system(size: 13, weight: .semibold))
+                    if codexConnection.isConnected && textAIProvider == AIProvider.chatGPT.rawValue {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
                 }
-                Text(codexConnection.status).font(.callout)
+                .foregroundStyle(.black)
+                .padding(.horizontal, 16).padding(.vertical, 11)
+                .background(.white, in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.1)))
+            }
+            .buttonStyle(.plain)
+            .disabled(codexConnection.isConnecting)
+            if textAIProvider == AIProvider.chatGPT.rawValue {
+                if codexConnection.isConnected, let email = codexConnection.connectedEmail {
+                    Text("Connected as \(email)").font(.callout).textSelection(.enabled)
+                }
+                Text(codexConnection.status).font(.caption).foregroundStyle(.secondary)
                 if codexConnection.isConnecting, let url = codexConnection.verificationURL {
                     Link("Continue sign-in", destination: url)
                 }
@@ -245,28 +245,59 @@ struct SettingsView: View {
                     if codexConnection.isConnecting {
                         ProgressView().controlSize(.small)
                         Button("Cancel sign-in") { codexConnection.cancelLogin() }
-                    } else if codexConnection.isConnected {
-                        Button("Disconnect") { Task { await codexConnection.disconnectAccount() } }
                     } else {
-                        Button { Task { await codexConnection.connect() } } label: {
-                            HStack(spacing: 9) {
-                                Image("ChatGPTLogo").resizable().scaledToFit().frame(width: 20, height: 20)
-                                Text("Connect ChatGPT").font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 16).padding(.vertical, 11)
-                            .background(.white, in: RoundedRectangle(cornerRadius: 9))
-                            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.1)))
+                        if codexConnection.isConnected {
+                            Button("Disconnect") { Task { await codexConnection.disconnectAccount() } }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Connect ChatGPT")
+                        Button("Check connection") { Task { await codexConnection.refreshAccount() } }
                     }
-                    Button("Check connection") { Task { await codexConnection.refreshAccount() } }
-                        .disabled(codexConnection.isConnecting)
                 }
-                Text("Uses Codex through your ChatGPT account. Your plan limits apply. Clippy has a separate sign-in.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
+            Text("Uses your ChatGPT plan’s Codex allowance.").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Rectangle().fill(Color.primary.opacity(0.1)).frame(height: 1)
+                Text("or use an API key").font(.caption).foregroundStyle(.secondary).fixedSize()
+                Rectangle().fill(Color.primary.opacity(0.1)).frame(height: 1)
+            }.padding(.vertical, 4)
+            SecureField(hasSavedKey ? savedKeyMask : "sk-proj-••••••••••••", text: $openAIKey)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(hasSavedKey ? "Replace saved OpenAI API key" : "OpenAI API key")
+                .help(hasSavedKey ? "A key is saved in Keychain. Enter a new key to replace it." : "Paste your OpenAI API key.")
+            HStack {
+                Button(hasSavedKey ? "Replace key" : "Save key") {
+                    let saved = OpenAICredentials.save(openAIKey)
+                    keyStatus = saved ? "Saved in Keychain." : "Couldn't save the key."
+                    openAIKey = ""
+                    if saved {
+                        refreshSavedKeyState()
+                        aiService.clear()
+                        modelCatalog.invalidate()
+                        if textAIProvider == AIProvider.openAI.rawValue {
+                            Task { await modelCatalog.refresh() }
+                        } else { textAIProvider = AIProvider.openAI.rawValue }
+                    }
+                }.disabled(openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if hasSavedKey {
+                    if textAIProvider != AIProvider.openAI.rawValue {
+                        Button("Use saved key") { textAIProvider = AIProvider.openAI.rawValue }
+                    }
+                    Button("Remove key") {
+                        let removed = OpenAICredentials.save("")
+                        keyStatus = removed ? "Key removed." : "Couldn't remove the key."
+                        openAIKey = ""
+                        if removed {
+                            refreshSavedKeyState()
+                            if textAIProvider == AIProvider.openAI.rawValue {
+                                aiService.clear()
+                                modelCatalog.invalidate()
+                                textAIProvider = AIProvider.none.rawValue
+                            }
+                        }
+                    }
+                }
+            }
+            if !keyStatus.isEmpty { Text(keyStatus).font(.caption) }
+            Text("Stored in Keychain. API usage is billed separately.").font(.caption).foregroundStyle(.secondary)
             if textAIProvider != AIProvider.none.rawValue {
                 Divider()
                 modelAndUsageSection
@@ -279,9 +310,52 @@ struct SettingsView: View {
             }.buttonStyle(.borderedProminent)
                 .disabled(textAIProvider == AIProvider.none.rawValue)
         }
+        .onChange(of: textAIProvider) { _, value in
+            aiService.clear()
+            modelCatalog.invalidate()
+            codexConnection.cancelLogin()
+            let shouldConnect = connectAfterProviderChange
+            connectAfterProviderChange = false
+            if value == AIProvider.chatGPT.rawValue {
+                Task {
+                    await codexConnection.refreshAccount()
+                    if shouldConnect && !codexConnection.isConnected && textAIProvider == AIProvider.chatGPT.rawValue {
+                        await codexConnection.connect()
+                    }
+                }
+            } else {
+                codexConnection.stop()
+                Task { await modelCatalog.refresh() }
+            }
+        }
         .task {
+            refreshSavedKeyState()
             if textAIProvider == AIProvider.chatGPT.rawValue { await codexConnection.refreshAccount() }
             else { await modelCatalog.refresh() }
+        }
+    }
+
+    private func refreshSavedKeyState() {
+        // Keep only a generic prefix and bullets in view state, never the saved secret.
+        let key = OpenAICredentials.read()
+        hasSavedKey = key?.isEmpty == false
+        savedKeyMask = (key?.hasPrefix("sk-proj-") == true ? "sk-proj-" : "sk-") + "••••••••••••"
+    }
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Appearance", systemImage: "paintpalette").font(.headline)
+            Picker("Theme", selection: $settings.theme) {
+                ForEach(ClippyTheme.allCases) { theme in Text(theme.title).tag(theme) }
+            }.pickerStyle(.segmented)
+            if settings.theme == .color {
+                Picker("Color", selection: $settings.themeTint) {
+                    ForEach(ClippyTint.allCases) { tint in Text(tint.title).tag(tint) }
+                }
+            }
+            Text(settings.theme == .transparent ? "A soft blur of what’s behind Clippy." :
+                 settings.theme == .color ? "A little color, in light or dark mode." : "The classic Clippy look.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -592,7 +666,7 @@ struct SettingsView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.primary)
             
-            Text("Clippy and updated Coworker share up to 400 recent clips on this Mac. Deleting or clearing history affects both apps. Your display limit only changes this list.")
+            Text("Clippy and updated Coworker share up to 1,000 recent clips on this Mac. Deleting or clearing history affects both apps. Your display limit only changes this list.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -607,6 +681,8 @@ struct SettingsView: View {
                     Text("50").tag(50)
                     Text("100").tag(100)
                     Text("200").tag(200)
+                    Text("500").tag(500)
+                    Text("1,000").tag(1000)
                 }
                 .pickerStyle(.menu)
                 .frame(width: 100)
@@ -856,14 +932,13 @@ struct HotkeyRecorderView: View {
 // MARK: - Settings Window Controller
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case clipboard, shortcuts, textAI, companion, about
+    case clipboard, shortcuts, textAI, about
     var id: String { rawValue }
     var title: String {
         switch self {
         case .shortcuts: return "Shortcuts"
         case .clipboard: return "Clipboard"
         case .textAI: return "Text AI"
-        case .companion: return "Companion"
         case .about: return "About Clippy"
         }
     }
@@ -872,7 +947,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .shortcuts: return "A quicker way to get there."
         case .clipboard: return "A little less searching. A little more doing."
         case .textAI: return "Write, rewrite and summarize. Always optional."
-        case .companion: return "A little personality for your desktop."
         case .about: return "Your clipboard, with a memory."
         }
     }
@@ -881,7 +955,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .shortcuts: return "keyboard"
         case .clipboard: return "clipboard"
         case .textAI: return "sparkles"
-        case .companion: return "bird"
         case .about: return "info.circle"
         }
     }
@@ -920,6 +993,8 @@ private struct SettingsSectionPositions: PreferenceKey {
                 backing: .buffered, defer: false
             )
             newWindow.contentViewController = NSHostingController(rootView: SettingsView())
+            newWindow.isOpaque = false
+            newWindow.backgroundColor = .clear
             newWindow.title = "Clippy Settings"
             newWindow.titleVisibility = .hidden
             newWindow.titlebarAppearsTransparent = true
@@ -940,4 +1015,45 @@ private struct SettingsSectionPositions: PreferenceKey {
 
 #Preview {
     SettingsView()
+}
+
+// Shared by Clippy’s desktop surfaces. AppKit supplies real desktop backdrop blur.
+struct ClippySurfaceBackground: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            if settings.theme == .transparent && !reduceTransparency {
+                ClippyBackdropBlur()
+            } else {
+                Color(nsColor: .windowBackgroundColor)
+            }
+            if settings.theme == .color {
+                LinearGradient(colors: [tint.opacity(colorScheme == .dark ? 0.24 : 0.16), tint.opacity(0.04)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+
+    private var tint: Color {
+        switch settings.themeTint {
+        case .blue: return CoworkerBrand.blue
+        case .lavender: return Color(red: 0.55, green: 0.40, blue: 0.90)
+        case .mint: return Color(red: 0.15, green: 0.65, blue: 0.48)
+        case .rose: return Color(red: 0.86, green: 0.35, blue: 0.53)
+        }
+    }
+}
+
+private struct ClippyBackdropBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

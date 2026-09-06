@@ -3,6 +3,18 @@ import Carbon
 import ServiceManagement
 import Security
 
+enum ClippyTheme: String, CaseIterable, Identifiable {
+    case solid, transparent, color
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+enum ClippyTint: String, CaseIterable, Identifiable {
+    case blue, lavender, mint, rose
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
 // MARK: - App Settings
 
 class AppSettings: ObservableObject {
@@ -18,6 +30,9 @@ class AppSettings: ObservableObject {
         didSet { saveSettings() }
     }
     
+    @Published var theme: ClippyTheme { didSet { saveSettings() } }
+    @Published var themeTint: ClippyTint { didSet { saveSettings() } }
+
     // History settings
     @Published var maxHistoryItems: Int {
         didSet { saveSettings() }
@@ -78,6 +93,8 @@ class AppSettings: ObservableObject {
     }
     
     private init() {
+        self.theme = ClippyTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .solid
+        self.themeTint = ClippyTint(rawValue: defaults.string(forKey: "themeTint") ?? "") ?? .blue
         // Load saved settings or use defaults
         self.hotkeyModifiers = UInt32(defaults.integer(forKey: "hotkeyModifiers"))
         self.hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") == nil ? UInt32(kVK_ANSI_V) : UInt32(defaults.integer(forKey: "hotkeyKeyCode"))
@@ -101,6 +118,8 @@ class AppSettings: ObservableObject {
     }
     
     func saveSettings() {
+        defaults.set(theme.rawValue, forKey: "theme")
+        defaults.set(themeTint.rawValue, forKey: "themeTint")
         defaults.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers")
         defaults.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode")
         defaults.set(maxHistoryItems, forKey: "maxHistoryItems")
@@ -123,6 +142,8 @@ class AppSettings: ObservableObject {
         hotkeyModifiers = UInt32(cmdKey | shiftKey)
         hotkeyKeyCode = UInt32(kVK_ANSI_V)
         maxHistoryItems = 100
+        theme = .solid
+        themeTint = .blue
         clearHistoryOnQuit = false
         autoPaste = true
         showMediaBar = false

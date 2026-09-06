@@ -7,6 +7,16 @@ struct OnboardingView: View {
     private let ink = Color(red: 0.06, green: 0.12, blue: 0.25)
 
     var body: some View {
+        welcomeCard
+    }
+
+    private func trustBadge(_ title: String) -> some View {
+        Label(title, systemImage: "shield")
+            .font(.system(size: 11, weight: .regular))
+            .foregroundStyle(Color(red: 0.40, green: 0.53, blue: 0.72))
+    }
+
+    private var welcomeCard: some View {
         ZStack {
             Color(red: 0.97, green: 0.98, blue: 1)
             RadialGradient(colors: [Color(red: 0.64, green: 0.86, blue: 1), .clear],
@@ -63,19 +73,13 @@ struct OnboardingView: View {
                     }.frame(width: 316, alignment: .leading)
                     clipboardExample
                 }
-                HStack {
-                    Text("FREE  ·  OPEN SOURCE  ·  ON YOUR MAC")
-                        .font(.system(size: 9, weight: .semibold)).tracking(1)
-                        .foregroundStyle(ink.opacity(0.6))
-                    Spacer()
-                    Button("Settings") {
-                        isPresented = false
-                        SettingsWindowController.shared.showSettings()
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .buttonStyle(.plain).foregroundStyle(CoworkerBrand.blue)
-                    .help("Optional AI, auto-paste and preferences")
+                HStack(spacing: 32) {
+                    trustBadge("Free")
+                    trustBadge("Open source")
+                    trustBadge("On your Mac")
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
             }
             .padding(.horizontal, 40).padding(.top, 46).padding(.bottom, 28)
         }
@@ -158,6 +162,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
         newWindow.contentView = container
+        newWindow.isOpaque = false
+        newWindow.backgroundColor = .clear
         newWindow.title = "Welcome to Clippy"
         newWindow.titleVisibility = .hidden
         newWindow.titlebarAppearsTransparent = true

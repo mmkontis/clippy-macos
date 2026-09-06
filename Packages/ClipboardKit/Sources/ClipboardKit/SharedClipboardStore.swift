@@ -5,6 +5,8 @@ import SQLite3
 /// Local protocol v1: mutation-based SQLite transactions, immutable image files,
 /// one-time legacy imports, and a revision counter for cross-app refreshes.
 final class SharedClipboardStore: @unchecked Sendable {
+    static let retentionLimit = 1_000
+
     struct Snapshot { let revision: Int64; let items: [ClipboardItem] }
     enum StoreError: Error { case database(String), invalidImage, newerProtocol }
     private enum Value { case text(String), data(Data), number(Double) }
@@ -75,7 +77,7 @@ final class SharedClipboardStore: @unchecked Sendable {
     func upsert(_ item: ClipboardItem, imageDirectory: URL? = nil) throws {
         try transaction {
             try insert(item, imageDirectory: imageDirectory, onlyIfNewer: false)
-            try execute("DELETE FROM clips WHERE id NOT IN (SELECT id FROM clips ORDER BY modified DESC, id LIMIT 400)")
+            try execute("DELETE FROM clips WHERE id NOT IN (SELECT id FROM clips ORDER BY modified DESC, id LIMIT \(Self.retentionLimit))")
             try bumpRevision()
         }
         try collectUnusedImages()
@@ -125,7 +127,7 @@ final class SharedClipboardStore: @unchecked Sendable {
                 catch StoreError.invalidImage { continue }
             }
             try execute("INSERT INTO metadata VALUES (?, 1)", [.text(marker)])
-            try execute("DELETE FROM clips WHERE id NOT IN (SELECT id FROM clips ORDER BY modified DESC, id LIMIT 400)")
+            try execute("DELETE FROM clips WHERE id NOT IN (SELECT id FROM clips ORDER BY modified DESC, id LIMIT \(Self.retentionLimit))")
             try bumpRevision()
         }
         try collectUnusedImages()

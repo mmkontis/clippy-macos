@@ -29,7 +29,7 @@ public enum ClipboardKitConfig {
 
 
     /// Hosts may supply their own history limit; Coworker retains the default.
-    public static var maximumHistoryItems: () -> Int = { 400 }
+    public static var maximumHistoryItems: () -> Int = { 1_000 }
 
     /// Folder name (under `~/Library/Application Support/`) where the package
     /// stores `history.json` and an `images/` directory. Each host app picks
