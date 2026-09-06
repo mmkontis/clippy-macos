@@ -1,6 +1,5 @@
 import SwiftUI
 import Carbon
-import AVFoundation
 import ClipboardKit
 #if !APP_STORE
 import Sparkle
@@ -10,230 +9,416 @@ import Sparkle
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @State private var isRecordingHotkey = false
-    @State private var recordedModifiers: NSEvent.ModifierFlags = []
-    @State private var recordedKeyCode: UInt16 = 0
     
     @State private var hasAccessibilityPermission = false
-    @State private var hasMicrophonePermission = false
     @State private var showResetConfirmation = false
-    @State private var voiceAPIKey = ""
-    @State private var voiceKeyStatus = ""
-    @AppStorage("cloudAIEnabled") private var cloudAIEnabled = false
+    @State private var openAIKey = ""
+    @State private var keyStatus = ""
+    @State private var hasSavedKey = false
+    @State private var savedKeyMask = "sk-proj-••••••••••••"
+    @State private var connectAfterProviderChange = false
+    @AppStorage("textAIProvider") private var textAIProvider = AIProvider.none.rawValue
+    @AppStorage("openAITextModel") private var openAITextModel = "gpt-5.4-mini"
+    @AppStorage("chatGPTTextModel") private var chatGPTTextModel = ""
+    @ObservedObject private var modelCatalog = AIModelCatalog.shared
+    @ObservedObject private var aiService = AIChatService.shared
+    @ObservedObject private var codexConnection = CodexConnection.shared
     
+    @ObservedObject private var navigation = SettingsNavigation.shared
+    @ObservedObject private var hotkeys = HotkeyHandler.shared
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 16) {
-                // App Icon
-                if let image = NSImage(named: "AppIcon") {
-                    Image(nsImage: image)
-                        .resizable()
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
-                } else {
-                    // Fallback
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(
-                            LinearGradient(
-                                colors: [.blue, .cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Image(systemName: "clipboard")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                        )
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Clippy")
-                        .font(.system(size: 20, weight: .bold))
-                    Text("Clipboard Manager")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-            .padding(24)
-            .background(Color(nsColor: .windowBackgroundColor))
-            
+        HStack(spacing: 0) {
+            sidebar
             Divider()
-            
-            // Settings content
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // General section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("General", systemImage: "slider.horizontal.3")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.blue)
-                        
-                        HStack {
-                            Text("Auto-paste on select:")
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                                Toggle("", isOn: $settings.autoPaste)
-                                    .disabled(!ClipboardKitConfig.allowsSimulatedKeystrokes)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
+            VStack(alignment: .leading, spacing: 0) {
+                GeometryReader { viewport in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 36) {
+                            ForEach(SettingsPage.allCases) { section in
+                                VStack(alignment: .leading, spacing: 16) {
+                                    if section == .clipboard {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text("Settings").font(.system(size: 30, weight: .bold))
+                                            Text("Make Clippy yours.").foregroundStyle(.secondary)
+                                        }
+                                        .padding(.bottom, 8)
+                                    }
+                                    Text(section.title).font(.system(size: 20, weight: .semibold))
+                                    sectionContent(section)
+                                }
+                                .frame(minHeight: section == .about ? max(0, viewport.size.height - 80) : 0, alignment: .topLeading)
+                                .id(section)
+                                .background(GeometryReader { geometry in
+                                    Color.clear.preference(key: SettingsSectionPositions.self,
+                                        value: [section: geometry.frame(in: .named("settingsScroll")).minY])
+                                })
+                            }
                         }
-                        
-                        Text(ClipboardKitConfig.allowsSimulatedKeystrokes ? "Automatically paste the selected item into the previously active app" : "Select an item, then press Command-V in your destination app.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
-                        
-                        Divider()
-                            .padding(.vertical, 4)
-                            
-                        HStack {
-                            Text("Show Media Bar:")
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                                Toggle("", isOn: $settings.showMediaBar)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-                        
-                        Text("Display a bar at the bottom with recent images and files")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
-
-                        Divider()
-                            .padding(.vertical, 4)
-
-                        HStack {
-                            Text("Dismiss recent stack after paste:")
-                                .foregroundColor(.secondary)
-
-                            Spacer()
-
-                                Toggle("", isOn: $settings.dismissRecentOnPaste)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-
-                        Text("When you press ⌘V or ⌃V in another app, remove the top tile from the bottom-left stack. The item stays in your clipboard history.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
-
-                        Divider()
-                            .padding(.vertical, 4)
-
-                        HStack {
-                            Text("Launch at login:")
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                                Toggle("", isOn: $settings.launchAtLogin)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-                        
-                        Text("Automatically start Clippy when you log in")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
+                        .frame(maxWidth: 680, alignment: .leading)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 80)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    
-                    Divider()
-                    
-                    // Permissions section
-                    permissionsSection
-                    
-                    Divider()
-                    
-                    cloudAISection
-                    Divider()
-                    // Penguin section
-                    penguinSection
-
-                    Divider()
-
-                    // Dictation section
-                    dictationSection
-
-                    Divider()
-
-                    // Hotkey section
-                    hotkeySection
-                    
-                    Divider()
-                    
-                    // History section
-                    historySection
-                    
-                    Divider()
-                    
-                    // About section
-                    aboutSection
-                    
-                    Divider()
-                    
-                    // Reset section
-                    resetSection
+                    .padding(.top, 36)
+                    .coordinateSpace(name: "settingsScroll")
+                    .onPreferenceChange(SettingsSectionPositions.self) { positions in
+                        let passed = positions.filter { $0.value <= 48 }
+                        if let current = passed.max(by: { $0.value < $1.value })?.key {
+                            navigation.page = current
+                            if current != .shortcuts { isRecordingHotkey = false }
+                        }
+                    }
+                    .onChange(of: navigation.scrollRequest) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(navigation.requestedPage, anchor: .top)
+                        }
+                    }
+                    .onAppear { proxy.scrollTo(navigation.requestedPage, anchor: .top) }
                 }
-                .padding(20)
-            }
-            
-            Divider()
-            
-            // Footer
-            HStack {
-                Spacer()
-                Button("Done") {
-                    NSApp.keyWindow?.close()
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
             }
-            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
         }
-        .frame(width: 500, height: 650)
-        .onAppear {
-            checkPermissions()
-        }
+        .background(ClippySurfaceBackground())
+        .ignoresSafeArea(.container, edges: .top)
+        .frame(minWidth: 800, minHeight: 580)
+        .tint(CoworkerBrand.blue)
+        .onAppear { checkPermissions() }
         .onChange(of: settings.maxHistoryItems) { _, _ in
             ClipboardManager.shared.enforceHistoryLimit()
         }
     }
-    
-    private var cloudAISection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Optional online AI", systemImage: "sparkles")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.blue)
-            #if !APP_STORE
-            Toggle("Enable AI paste", isOn: $cloudAIEnabled)
-            Text("AI paste sends the prompt you submit and a random installation ID to Humanlike's online service. Service limits apply. Clipboard history works free and offline without it.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            #endif
-            SecureField("Your Gemini API key (optional)", text: $voiceAPIKey)
-                .textFieldStyle(.roundedBorder)
-            HStack {
-                Button("Save voice key") {
-                    voiceKeyStatus = VoiceCredentials.save(voiceAPIKey) ? "Saved in Keychain." : "Could not save in Keychain. Try again."
-                    voiceAPIKey = ""
-                }
-                .disabled(voiceAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Remove voice key") {
-                    voiceKeyStatus = VoiceCredentials.save("") ? "Voice key removed." : "Could not remove the key."
-                    voiceAPIKey = ""
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 10) {
+                Image("ClippyLogo").resizable().scaledToFit()
+                    .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Clippy").font(.system(size: 18, weight: .bold))
+                    Text("Your clipboard, with a memory.").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
-            Text("Voice sends microphone audio to Google only when you start a conversation. Your API provider may charge for usage. The key stays in your Mac's Keychain.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            if !voiceKeyStatus.isEmpty { Text(voiceKeyStatus).font(.caption) }
+            .padding(.horizontal, 8)
+            VStack(spacing: 4) {
+                ForEach(SettingsPage.allCases) { page in
+                    Button { navigation.scroll(to: page) } label: {
+                        Label(page.title, systemImage: page.symbol)
+                            .font(.system(size: 13, weight: navigation.page == page ? .semibold : .regular))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12).padding(.vertical, 10)
+                            .background(navigation.page == page ? Color.primary.opacity(0.07) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(navigation.page == page ? .isSelected : [])
+                }
+            }
+            Spacer()
+            Button { DictationPromo.shared.openDownloadPage() } label: {
+                HStack(spacing: 10) {
+                    Image("CoworkerLogo").resizable().scaledToFit().frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Get Coworker").font(.system(size: 12, weight: .semibold))
+                        Text("Free voice typing").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(.secondary)
+                }.padding(10)
+            }.buttonStyle(.plain)
+            Text("Free. Open source. Yours.").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 10)
+        }
+        .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 24)
+        .frame(width: 204)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(settings.theme == .solid ? 1 : 0.35))
+    }
+
+    @ViewBuilder private func sectionContent(_ section: SettingsPage) -> some View {
+        switch section {
+        case .clipboard:
+            card {
+                settingsToggle("Launch at login", detail: "Keep Clippy ready when your Mac starts.", value: $settings.launchAtLogin)
+                if let message = settings.launchAtLoginMessage {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                }
+                Divider()
+                if ClipboardKitConfig.allowsSimulatedKeystrokes {
+                    settingsToggle("Paste on select", detail: "Insert a selected clip into the previous app.", value: $settings.autoPaste)
+                    Divider()
+                } else {
+                    Label("Choose a clip, then press Command-V to paste.", systemImage: "doc.on.clipboard")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Divider()
+                }
+                settingsToggle("Media bar", detail: "Keep recent images and files within reach.", value: $settings.showMediaBar)
+                Divider()
+                settingsToggle("Dismiss recent tiles after paste", detail: "Clips remain in your history.", value: $settings.dismissRecentOnPaste)
+            }
+            card { historySection }
+            card { appearanceSection }
+            #if !APP_STORE
+            card { permissionsSection }
+            #endif
+        case .shortcuts:
+            card { hotkeySection }
+        case .textAI:
+            card { cloudAISection }
+        case .about:
+            card { aboutSection }
+            card {
+                DisclosureGroup("Companion") { penguinSection.padding(.top, 12) }
+            }
+            card { resetSection }
+        }
+    }
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 18, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(22)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(settings.theme == .solid ? 1 : 0.45), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.05)))
+    }
+
+    private func settingsToggle(_ title: String, detail: String, value: Binding<Bool>) -> some View {
+        HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle(title, isOn: value).labelsHidden().toggleStyle(.switch)
+        }
+    }
+
+    private var cloudAISection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your connection").font(.headline)
+            HStack {
+                Text(textAIProvider == AIProvider.none.rawValue ? "Optional. Choose how to connect." :
+                     textAIProvider == AIProvider.chatGPT.rawValue ? "Using ChatGPT" : "Using an API key")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if textAIProvider != AIProvider.none.rawValue {
+                    Button("Turn off AI") { textAIProvider = AIProvider.none.rawValue }
+                        .font(.caption)
+                }
+            }
+            Button {
+                if textAIProvider != AIProvider.chatGPT.rawValue {
+                    connectAfterProviderChange = true
+                    textAIProvider = AIProvider.chatGPT.rawValue
+                } else {
+                    Task {
+                        if codexConnection.isConnected { await codexConnection.refreshAccount() }
+                        else { await codexConnection.connect() }
+                    }
+                }
+            } label: {
+                HStack(spacing: 9) {
+                    Image("ChatGPTLogo").resizable().scaledToFit().frame(width: 20, height: 20)
+                    Text(codexConnection.isConnected && textAIProvider == AIProvider.chatGPT.rawValue
+                         ? "Connected to ChatGPT" : "Connect ChatGPT")
+                        .font(.system(size: 13, weight: .semibold))
+                    if codexConnection.isConnected && textAIProvider == AIProvider.chatGPT.rawValue {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
+                }
+                .foregroundStyle(.black)
+                .padding(.horizontal, 16).padding(.vertical, 11)
+                .background(.white, in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.1)))
+            }
+            .buttonStyle(.plain)
+            .disabled(codexConnection.isConnecting)
+            if textAIProvider == AIProvider.chatGPT.rawValue {
+                if codexConnection.isConnected, let email = codexConnection.connectedEmail {
+                    Text("Connected as \(email)").font(.callout).textSelection(.enabled)
+                }
+                Text(codexConnection.status).font(.caption).foregroundStyle(.secondary)
+                if codexConnection.isConnecting, let url = codexConnection.verificationURL {
+                    Link("Continue sign-in", destination: url)
+                }
+                HStack {
+                    if codexConnection.isConnecting {
+                        ProgressView().controlSize(.small)
+                        Button("Cancel sign-in") { codexConnection.cancelLogin() }
+                    } else {
+                        if codexConnection.isConnected {
+                            Button("Disconnect") { Task { await codexConnection.disconnectAccount() } }
+                        }
+                        Button("Check connection") { Task { await codexConnection.refreshAccount() } }
+                    }
+                }
+            }
+            Text("Uses your ChatGPT plan’s Codex allowance.").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Rectangle().fill(Color.primary.opacity(0.1)).frame(height: 1)
+                Text("or use an API key").font(.caption).foregroundStyle(.secondary).fixedSize()
+                Rectangle().fill(Color.primary.opacity(0.1)).frame(height: 1)
+            }.padding(.vertical, 4)
+            SecureField(hasSavedKey ? savedKeyMask : "sk-proj-••••••••••••", text: $openAIKey)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(hasSavedKey ? "Replace saved OpenAI API key" : "OpenAI API key")
+                .help(hasSavedKey ? "A key is saved in Keychain. Enter a new key to replace it." : "Paste your OpenAI API key.")
+            HStack {
+                Button(hasSavedKey ? "Replace key" : "Save key") {
+                    let saved = OpenAICredentials.save(openAIKey)
+                    keyStatus = saved ? "Saved in Keychain." : "Couldn't save the key."
+                    openAIKey = ""
+                    if saved {
+                        refreshSavedKeyState()
+                        aiService.clear()
+                        modelCatalog.invalidate()
+                        if textAIProvider == AIProvider.openAI.rawValue {
+                            Task { await modelCatalog.refresh() }
+                        } else { textAIProvider = AIProvider.openAI.rawValue }
+                    }
+                }.disabled(openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if hasSavedKey {
+                    if textAIProvider != AIProvider.openAI.rawValue {
+                        Button("Use saved key") { textAIProvider = AIProvider.openAI.rawValue }
+                    }
+                    Button("Remove key") {
+                        let removed = OpenAICredentials.save("")
+                        keyStatus = removed ? "Key removed." : "Couldn't remove the key."
+                        openAIKey = ""
+                        if removed {
+                            refreshSavedKeyState()
+                            if textAIProvider == AIProvider.openAI.rawValue {
+                                aiService.clear()
+                                modelCatalog.invalidate()
+                                textAIProvider = AIProvider.none.rawValue
+                            }
+                        }
+                    }
+                }
+            }
+            if !keyStatus.isEmpty { Text(keyStatus).font(.caption) }
+            Text("Stored in Keychain. API usage is billed separately.").font(.caption).foregroundStyle(.secondary)
+            if textAIProvider != AIProvider.none.rawValue {
+                Divider()
+                modelAndUsageSection
+            }
+            Text("Only the text you send is shared with OpenAI. No voice recording. Clipboard history stays on your Mac and works without AI.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Open text AI") {
+                SettingsWindowController.shared.hide()
+                AppDelegate.shared?.showAIPanelNearCursor()
+            }.buttonStyle(.borderedProminent)
+                .disabled(textAIProvider == AIProvider.none.rawValue)
+        }
+        .onChange(of: textAIProvider) { _, value in
+            aiService.clear()
+            modelCatalog.invalidate()
+            codexConnection.cancelLogin()
+            let shouldConnect = connectAfterProviderChange
+            connectAfterProviderChange = false
+            if value == AIProvider.chatGPT.rawValue {
+                Task {
+                    await codexConnection.refreshAccount()
+                    if shouldConnect && !codexConnection.isConnected && textAIProvider == AIProvider.chatGPT.rawValue {
+                        await codexConnection.connect()
+                    }
+                }
+            } else {
+                codexConnection.stop()
+                Task { await modelCatalog.refresh() }
+            }
+        }
+        .task {
+            refreshSavedKeyState()
+            if textAIProvider == AIProvider.chatGPT.rawValue { await codexConnection.refreshAccount() }
+            else { await modelCatalog.refresh() }
+        }
+    }
+
+    private func refreshSavedKeyState() {
+        // Keep only a generic prefix and bullets in view state, never the saved secret.
+        let key = OpenAICredentials.read()
+        hasSavedKey = key?.isEmpty == false
+        savedKeyMask = (key?.hasPrefix("sk-proj-") == true ? "sk-proj-" : "sk-") + "••••••••••••"
+    }
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Appearance", systemImage: "paintpalette").font(.headline)
+            Picker("Theme", selection: $settings.theme) {
+                ForEach(ClippyTheme.allCases) { theme in Text(theme.title).tag(theme) }
+            }.pickerStyle(.segmented)
+            if settings.theme == .color {
+                Picker("Color", selection: $settings.themeTint) {
+                    ForEach(ClippyTint.allCases) { tint in Text(tint.title).tag(tint) }
+                }
+            }
+            Text(settings.theme == .transparent ? "A soft blur of what’s behind Clippy." :
+                 settings.theme == .color ? "A little color, in light or dark mode." : "The classic Clippy look.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var modelAndUsageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Model & usage").font(.headline)
+                Spacer()
+                if modelCatalog.isRefreshing { ProgressView().controlSize(.small) }
+                Button("Refresh") { Task { await modelCatalog.refresh() } }
+                    .disabled(modelCatalog.isRefreshing)
+            }
+            let selected = textAIProvider == AIProvider.chatGPT.rawValue ? chatGPTTextModel : openAITextModel
+            Picker("Model", selection: Binding(
+                get: { textAIProvider == AIProvider.chatGPT.rawValue ? chatGPTTextModel : openAITextModel },
+                set: { if textAIProvider == AIProvider.chatGPT.rawValue { chatGPTTextModel = $0 } else { openAITextModel = $0 } }
+            )) {
+                if !modelCatalog.models.contains(where: { $0.id == selected }) {
+                    Text(selected.isEmpty ? "Choose a connection first" : "\(selected) (saved)").tag(selected)
+                }
+                ForEach(modelCatalog.models) { model in Text(model.title).tag(model.id) }
+            }
+            .disabled(modelCatalog.models.isEmpty)
+            Text("Models refresh automatically when Clippy starts.").font(.caption).foregroundStyle(.secondary)
+            if let refreshed = modelCatalog.refreshedAt {
+                Text("Updated \(refreshed.formatted(date: .omitted, time: .shortened))").font(.caption2).foregroundStyle(.secondary)
+            }
+            if let error = modelCatalog.modelsError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
+            if textAIProvider == AIProvider.chatGPT.rawValue {
+                Text("Codex allowance · shared across your account").font(.subheadline)
+                ForEach(modelCatalog.windows) { window in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(window.title)
+                            Spacer()
+                            Text("\(window.usedPercent)% used").monospacedDigit()
+                        }.font(.caption)
+                        ProgressView(value: Double(min(window.usedPercent, 100)), total: 100)
+                        if let reset = window.resetsAt {
+                            Text("Resets \(reset.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if let error = modelCatalog.usageError { Text(error).font(.caption).foregroundStyle(.secondary) }
+            } else {
+                Text("API usage below covers your latest Clippy reply.").font(.caption).foregroundStyle(.secondary)
+                Link("Open API usage dashboard", destination: URL(string: "https://platform.openai.com/usage")!).font(.caption)
+            }
+            if let usage = aiService.lastUsage, usage.provider.rawValue == textAIProvider {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Last reply · \(usage.model)").font(.caption).fontWeight(.medium)
+                    Text("\(usage.input.formatted()) input · \(usage.output.formatted()) output tokens (\(usage.cached.formatted()) input cached)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Token usage appears after your next reply.").font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -243,7 +428,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Permissions", systemImage: "lock.shield")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             Text("Enable only the permissions for the features you use:")
                 .font(.system(size: 12))
@@ -287,40 +472,6 @@ struct SettingsView: View {
                 )
                 
                 #endif
-                // Microphone Permission
-                HStack {
-                    Image(systemName: hasMicrophonePermission ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(hasMicrophonePermission ? .green : .red)
-                        .font(.system(size: 18))
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Microphone")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Required for AI penguin voice chat")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    if !hasMicrophonePermission {
-                        Button("Grant Access") {
-                            requestMicrophonePermission()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                        .controlSize(.small)
-                    } else {
-                        Text("Granted")
-                            .font(.system(size: 12))
-                            .foregroundColor(.green)
-                    }
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
             }
             
             HStack {
@@ -344,8 +495,6 @@ struct SettingsView: View {
         let trusted = AXIsProcessTrusted()
         hasAccessibilityPermission = trusted
         
-        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        hasMicrophonePermission = (micStatus == .authorized)
     }
     
     private func requestAccessibilityPermission() {
@@ -358,22 +507,8 @@ struct SettingsView: View {
         }
     }
     
-    private func requestMicrophonePermission() {
-        NSApp.activate(ignoringOtherApps: true)
-        AVCaptureDevice.requestAccess(for: .audio) { granted in
-            DispatchQueue.main.async {
-                hasMicrophonePermission = granted
-                if !granted {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            }
-        }
-    }
-    
     private func openPrivacySettings() {
-        if let url = URL(string: ClipboardKitConfig.allowsSimulatedKeystrokes ? "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" : "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -384,7 +519,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("AI Penguin", systemImage: "bird")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             HStack(spacing: 16) {
                 let theme = PenguinCustomization.shared.colorTheme
@@ -480,9 +615,9 @@ struct SettingsView: View {
 
     private var hotkeySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Keyboard Shortcut", systemImage: "keyboard")
+            Text("Open from anywhere")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             HStack {
                 Text("Open Clipboard History:")
@@ -497,7 +632,30 @@ struct SettingsView: View {
                 )
             }
             
-            Text("Click the shortcut field and press your desired key combination")
+            if let message = hotkeys.registrationMessage {
+                Text(message).font(.callout).foregroundStyle(hotkeys.isActive ? Color.secondary : .orange)
+            }
+            HStack {
+                Button("Open clipboard") {
+                    SettingsWindowController.shared.hide()
+                    AppDelegate.shared?.showPanelNearCursor()
+                }
+                if !hotkeys.isActive {
+                    Button("Use an available shortcut") { hotkeys.useAvailableShortcut() }
+                }
+            }
+            Divider()
+            HStack {
+                Text("Open text AI")
+                Spacer()
+                Text(hotkeys.aiShortcutAvailable ? "⌘⇧C" : "Unavailable").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("Show or hide companion")
+                Spacer()
+                Text(hotkeys.companionShortcutAvailable ? "⌘⇧P" : "Unavailable").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            Text("Click the clipboard shortcut to change it. No permission is needed.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
@@ -509,9 +667,9 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("History", systemImage: "clock.arrow.circlepath")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
-            Text("Clippy and updated Coworker share up to 400 recent clips on this Mac. Deleting or clearing history affects both apps. Your display limit only changes this list.")
+            Text("Clippy and updated Coworker share up to 1,000 recent clips on this Mac. Deleting or clearing history affects both apps. Your display limit only changes this list.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -526,6 +684,8 @@ struct SettingsView: View {
                     Text("50").tag(50)
                     Text("100").tag(100)
                     Text("200").tag(200)
+                    Text("500").tag(500)
+                    Text("1,000").tag(1000)
                 }
                 .pickerStyle(.menu)
                 .frame(width: 100)
@@ -550,7 +710,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("About", systemImage: "info.circle")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             HStack {
                 Text("Clippy")
@@ -560,24 +720,23 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
             
-            Text("Smart clipboard manager for macOS with AI paste and penguin assistant")
+            Text("Your clipboard, with a memory. Optional text AI and a penguin companion.")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
             
-            #if !APP_STORE
+            Text(AppDelegate.distributionDescription)
+                .font(.caption).foregroundStyle(.secondary)
             Button {
-                if let appDelegate = AppDelegate.shared {
-                    appDelegate.updaterController.checkForUpdates(nil)
-                }
+                AppDelegate.shared?.checkForUpdates()
             } label: {
                 HStack {
                     Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Check for Updates...")
+                    Text(AppDelegate.updateActionTitle)
                 }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            #endif
+            Link("Source code", destination: URL(string: "https://github.com/mmkontis/clippy-macos")!)
         }
     }
     
@@ -626,6 +785,7 @@ struct SettingsView: View {
         
         // Reset all settings
         AppSettings.shared.resetAllSettings()
+        HotkeyHandler.shared.reregisterHotkey()
         
         // Close settings window
         NSApp.keyWindow?.close()
@@ -658,7 +818,7 @@ struct HotkeyRecorderView: View {
             HStack(spacing: 4) {
                 if isRecording {
                     Text("Press keys...")
-                        .foregroundColor(.blue)
+                        .foregroundColor(.primary)
                 } else {
                     Text(hotkeyDisplayString)
                         .foregroundColor(.primary)
@@ -677,9 +837,17 @@ struct HotkeyRecorderView: View {
             )
         }
         .buttonStyle(.plain)
+        .onDisappear { stopRecording(); isRecording = false }
+        .onChange(of: isRecording) { _, recording in
+            if !recording { stopRecording() }
+        }
     }
     
     private var hotkeyDisplayString: String {
+        Self.displayString(modifiers: modifiers, keyCode: keyCode)
+    }
+
+    static func displayString(modifiers: UInt32, keyCode: UInt32) -> String {
         var parts: [String] = []
         
         if modifiers & UInt32(cmdKey) != 0 {
@@ -702,7 +870,7 @@ struct HotkeyRecorderView: View {
         return parts.isEmpty ? "Click to set" : parts.joined()
     }
     
-    private func keyCodeToString(_ keyCode: UInt32) -> String? {
+    private static func keyCodeToString(_ keyCode: UInt32) -> String? {
         let keyMap: [UInt32: String] = [
             0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
             8: "C", 9: "V", 10: "§", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",
@@ -720,7 +888,13 @@ struct HotkeyRecorderView: View {
     }
     
     private func startRecording() {
+        HotkeyHandler.shared.stopListening()
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                self.isRecording = false
+                self.stopRecording()
+                return nil
+            }
             // Get modifiers
             var mods: UInt32 = 0
             if event.modifierFlags.contains(.command) {
@@ -743,9 +917,6 @@ struct HotkeyRecorderView: View {
                 self.isRecording = false
                 self.stopRecording()
                 
-                // Re-register the hotkey
-                AppSettings.shared.saveSettings()
-                HotkeyHandler.shared.reregisterHotkey()
             }
             
             return nil // Consume the event
@@ -756,47 +927,142 @@ struct HotkeyRecorderView: View {
         if let monitor = localMonitor {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
+            HotkeyHandler.shared.startListening()
         }
     }
 }
 
 // MARK: - Settings Window Controller
 
-class SettingsWindowController {
-    static let shared = SettingsWindowController()
-    
-    private var window: NSWindow?
-    
-    func showSettings() {
-        if let existingWindow = window, existingWindow.isVisible {
-            existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case clipboard, shortcuts, textAI, about
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .shortcuts: return "Shortcuts"
+        case .clipboard: return "Clipboard"
+        case .textAI: return "Text AI"
+        case .about: return "About Clippy"
         }
-        
-        let settingsView = SettingsView()
-        let hostingController = NSHostingController(rootView: settingsView)
-        
-        let newWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 650),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        
-        newWindow.contentViewController = hostingController
-        newWindow.title = "Clippy Settings"
-        newWindow.center()
-        newWindow.isReleasedWhenClosed = false
-        newWindow.makeKeyAndOrderFront(nil)
-        
-        NSApp.activate(ignoringOtherApps: true)
-        
-        window = newWindow
     }
+    var subtitle: String {
+        switch self {
+        case .shortcuts: return "A quicker way to get there."
+        case .clipboard: return "A little less searching. A little more doing."
+        case .textAI: return "Write, rewrite and summarize. Always optional."
+        case .about: return "Your clipboard, with a memory."
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .shortcuts: return "keyboard"
+        case .clipboard: return "clipboard"
+        case .textAI: return "sparkles"
+        case .about: return "info.circle"
+        }
+    }
+}
+
+@MainActor final class SettingsNavigation: ObservableObject {
+    static let shared = SettingsNavigation()
+    @Published var page: SettingsPage = .clipboard
+    @Published private(set) var scrollRequest = UUID()
+    private(set) var requestedPage: SettingsPage = .clipboard
+
+    func scroll(to page: SettingsPage) {
+        requestedPage = page
+        self.page = page
+        scrollRequest = UUID()
+    }
+}
+
+private struct SettingsSectionPositions: PreferenceKey {
+    static let defaultValue: [SettingsPage: CGFloat] = [:]
+    static func reduce(value: inout [SettingsPage: CGFloat], nextValue: () -> [SettingsPage: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+@MainActor final class SettingsWindowController: NSObject, NSWindowDelegate {
+    static let shared = SettingsWindowController()
+    private var window: NSWindow?
+
+    func showSettings(page: SettingsPage? = nil) {
+        AppDelegate.shared?.hidePanel()
+        if let page { SettingsNavigation.shared.scroll(to: page) }
+        if window == nil {
+            let newWindow = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 940, height: 680),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                backing: .buffered, defer: false
+            )
+            newWindow.contentViewController = NSHostingController(rootView: SettingsView())
+            newWindow.isOpaque = false
+            newWindow.backgroundColor = .clear
+            newWindow.delegate = self
+            newWindow.title = "Clippy Settings"
+            newWindow.titleVisibility = .hidden
+            newWindow.titlebarAppearsTransparent = true
+            newWindow.titlebarSeparatorStyle = .none
+            newWindow.isMovableByWindowBackground = true
+            newWindow.minSize = NSSize(width: 800, height: 580)
+            newWindow.setFrameAutosaveName("ClippyDesktopSettings")
+            newWindow.center()
+            newWindow.isReleasedWhenClosed = false
+            window = newWindow
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        AppDelegate.shared?.hidePanel()
+    }
+
+    func hide() { window?.orderOut(nil) }
 }
 
 #Preview {
     SettingsView()
 }
 
+// Shared by Clippy’s desktop surfaces. AppKit supplies real desktop backdrop blur.
+struct ClippySurfaceBackground: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            if settings.theme == .transparent && !reduceTransparency {
+                ClippyBackdropBlur()
+            } else {
+                Color(nsColor: .windowBackgroundColor)
+            }
+            if settings.theme == .color {
+                LinearGradient(colors: [tint.opacity(colorScheme == .dark ? 0.24 : 0.16), tint.opacity(0.04)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+
+    private var tint: Color {
+        switch settings.themeTint {
+        case .blue: return CoworkerBrand.blue
+        case .lavender: return Color(red: 0.55, green: 0.40, blue: 0.90)
+        case .mint: return Color(red: 0.15, green: 0.65, blue: 0.48)
+        case .rose: return Color(red: 0.86, green: 0.35, blue: 0.53)
+        }
+    }
+}
+
+private struct ClippyBackdropBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}

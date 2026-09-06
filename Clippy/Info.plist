@@ -32,8 +32,6 @@
 	<string>NSApplication</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Clippy needs to send keyboard events to paste clipboard content into other applications.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Clippy needs access to your microphone so you can talk to the AI penguin in real-time.</string>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/mmkontis/clippy-macos/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>

@@ -48,7 +48,7 @@ struct ClipboardPanel: View {
             footerView
         }
         .frame(width: 420, height: 480)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(ClippySurfaceBackground())
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -128,7 +128,6 @@ struct ClipboardPanel: View {
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
             
-            #if !APP_STORE
             // Sparkle button: if search text is present, use it as AI prompt; otherwise switch to AI panel
             Button(action: {
                 let query = clipboardManager.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -156,7 +155,6 @@ struct ClipboardPanel: View {
             }
             .buttonStyle(.plain)
             .help("Switch to AI (Cmd+Shift+C)")
-            #endif
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -275,7 +273,7 @@ struct ClipboardPanel: View {
                 )
                 
                 Button {
-                    if let appDelegate = NSApp.delegate as? AppDelegate {
+                    if let appDelegate = AppDelegate.shared {
                         appDelegate.hidePanel()
                     }
                     SettingsWindowController.shared.showSettings()

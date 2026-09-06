@@ -1,3 +1,7 @@
+# Version 1.3 development
+
+Build 9 replaces voice with text AI and bundles Codex for ChatGPT sign-in. It is not yet a published or Store-uploaded release. Apple Silicon builds of both targets, seven ClipboardKit tests, text response/error/cancellation tests, and a signed sandbox Codex handshake pass locally. The signed Store preview completes official ChatGPT browser sign-in, retains the connection after restarting, and returns a real text reply. Desktop Settings, a native menu and shortcut conflict handling are also included. Complete a live API-key reply, logout validation, the physical keyboard check, final universal builds, release signing and notarization before replacing the published download or Store build 8.
+
 # Releasing Clippy
 
 Version 1.2.0, build 8 is published on GitHub as a Developer ID signed, notarized universal Mac app ZIP. A successful local build alone does not establish that another artifact is notarized or publishable.

@@ -1,7 +1,11 @@
 import SwiftUI
 import AppKit
 import ApplicationServices
+#if DEBUG
+@testable import ClipboardKit
+#else
 import ClipboardKit
+#endif
 #if !APP_STORE
 import Sparkle
 #endif
@@ -20,6 +24,7 @@ struct ClippyApp: App {
 
 // MARK: - App Delegate
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shared instance for access from SwiftUI views
     static var shared: AppDelegate?
@@ -31,6 +36,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var mediaBarWindow: NSWindow?
     private var penguinWindow: FloatingPenguinWindow?
     private var eventMonitor: Any?
+    private var localPanelMonitor: Any?
+    private var mediaDismissScroll: CGFloat = 0
     private var aiEventMonitor: Any?
     
     #if !APP_STORE
@@ -40,6 +47,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }()
     
     #endif
+
+    static var updateActionTitle: String {
+        #if APP_STORE
+        "Check App Store for Updates…"
+        #else
+        "Check for Updates…"
+        #endif
+    }
+
+    static var distributionDescription: String {
+        #if APP_STORE
+        "App Store edition. Updates through the Mac App Store."
+        #else
+        "GitHub edition. Updates through Sparkle."
+        #endif
+    }
 
     /// The application that was active before showing the panel
     static var previousActiveApp: NSRunningApplication?
@@ -52,6 +75,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if CommandLine.arguments.contains("--self-test-windows") {
+            setbuf(stdout, nil)
+            AppDelegate.shared = self
+            ClipboardKitConfig.sharedHistoryEnabled = false
+            ClipboardKitConfig.storageFolderName = "ClippyWindowTests-\(UUID().uuidString)"
+            UserDefaults.standard.setVolatileDomain(["textAIProvider": "none", "showMediaBar": false], forName: UserDefaults.argumentDomain)
+            Task { await runWindowRegressionChecks() }
+            return
+        }
+        if CommandLine.arguments.contains("--preview-text-ai") {
+            setbuf(stdout, nil)
+            AppDelegate.shared = self
+            ClipboardKitConfig.storageFolderName = "ClippyTextAIPreview"
+            #if APP_STORE
+            ClipboardKitConfig.allowsSimulatedKeystrokes = false
+            #endif
+            #if !APP_STORE
+            _ = updaterController
+            #endif
+            setupStatusItem()
+            setupHotkey()
+            if CommandLine.arguments.contains("--preview-onboarding") {
+                OnboardingWindowController.shared.showOnboarding()
+            } else {
+                SettingsWindowController.shared.showSettings()
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--capture-listing"), CommandLine.arguments.count > index + 1 {
             captureListing(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
             return
@@ -78,6 +129,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ClipboardKitConfig.sharedContainerURL = container
         ClipboardKitConfig.allowsSimulatedKeystrokes = false
         #endif
+        AppSettings.shared.configureLaunchAtLogin()
         ClipboardKitConfig.enableSharedHistory(client: "clippy")
         ClipboardKitConfig.maximumHistoryItems = { AppSettings.shared.maxHistoryItems }
         ClipboardKitConfig.dismissOnPasteEnabled = { AppSettings.shared.dismissRecentOnPaste }
@@ -89,6 +141,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         setupStatusItem()
         setupHotkey()
+        Task { await AIModelCatalog.shared.refresh() }
         
         Task { @MainActor in
             clipboardMonitor.startMonitoring()
@@ -103,6 +156,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if OnboardingWindowController.shared.isVisible {
+            OnboardingWindowController.shared.showOnboarding()
+        } else if flag {
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            SettingsWindowController.shared.showSettings()
+        }
+        return true
+    }
+
     /// Checks if accessibility permission is granted
     /// Returns true if permission is granted (no prompt shown)
     @discardableResult
@@ -113,6 +177,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationWillTerminate(_ notification: Notification) {
+        AIChatService.shared.cancel()
+        CodexConnection.shared.cancelLogin()
+        CodexConnection.shared.stop()
         // Check if we should clear history on quit
         if AppSettings.shared.clearHistoryOnQuit {
             clipboardManager.clearHistory()
@@ -126,60 +193,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clippy")
-            button.action = #selector(statusItemClicked(_:))
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem?.button?.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clippy")
+        statusItem?.button?.toolTip = "Clippy"
+        let menu = NSMenu(title: "Clippy")
+        func item(_ title: String, _ action: Selector, key: String = "", symbol: String? = nil) -> NSMenuItem {
+            let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            entry.target = self
+            if let symbol { entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+            menu.addItem(entry)
+            return entry
         }
-    }
-    
-    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        let event = NSApp.currentEvent!
-        
-        if event.type == .rightMouseUp {
-            // Show context menu on right-click
-            showContextMenu()
-        } else {
-            // Toggle panel on left-click
-            togglePanel()
-        }
-    }
-    
-    private func showContextMenu() {
-        let menu = NSMenu()
-        
-        menu.addItem(NSMenuItem(title: "Show Clipboard History", action: #selector(showPanel), keyEquivalent: ""))
-
-        let dictationItem = NSMenuItem(title: "Get Coworker Dictation", action: #selector(openDictationMode), keyEquivalent: "")
-        dictationItem.target = self
+        _ = item("Clipboard", #selector(showPanel), symbol: "clipboard")
+        _ = item("Ask Clippy…", #selector(openTextAI), symbol: "sparkles")
+        menu.addItem(.separator())
+        _ = item("Settings…", #selector(openSettings), key: ",", symbol: "gearshape")
+        _ = item(Self.updateActionTitle, #selector(checkForUpdates), symbol: "arrow.down.circle")
+        _ = item("About Clippy", #selector(openAbout), symbol: "info.circle")
+        menu.addItem(.separator())
+        let coworker = item("Get Coworker", #selector(openDictationMode))
         if let logo = NSImage(named: "CoworkerLogo")?.copy() as? NSImage {
             logo.size = NSSize(width: 18, height: 18)
-            dictationItem.image = logo
+            coworker.image = logo
         }
-
-        menu.addItem(dictationItem)
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Customize Penguin...", action: #selector(openPenguinCreator), keyEquivalent: "p"))
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        #if !APP_STORE
-        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "u")
-        updateItem.target = updaterController
-        menu.addItem(updateItem)
-        menu.addItem(NSMenuItem.separator())
-        #endif
-        menu.addItem(NSMenuItem(title: "Quit Clippy", action: #selector(quitApp), keyEquivalent: "q"))
-        
+        menu.addItem(.separator())
+        _ = item("Quit Clippy", #selector(quitApp), key: "q")
         statusItem?.menu = menu
-        statusItem?.button?.performClick(nil)
-        statusItem?.menu = nil
     }
-    
+
+    @objc func checkForUpdates() {
+        #if APP_STORE
+        if let url = URL(string: "macappstore://apps.apple.com/app/id6809036065") { NSWorkspace.shared.open(url) }
+        #else
+        updaterController.checkForUpdates(nil)
+        #endif
+    }
+
+    @objc private func openAbout() {
+        hidePanel()
+        hideAIPanel()
+        SettingsWindowController.shared.showSettings(page: .about)
+    }
+
     private func togglePanel() {
         if let window = panelWindow, window.isVisible {
             hidePanel()
@@ -189,35 +243,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func showPanel() {
-        Task { @MainActor in
-            showPanelWindow(nearCursor: false)
-        }
+        showPanelWindow(nearCursor: false)
     }
 
-    /// Opens the clipboard panel and reveals the dictation download banner.
     @objc private func openDictationMode() {
-        Task { @MainActor in
-            DictationPromo.shared.reveal()
-            showPanelWindow(nearCursor: false)
-        }
+        DictationPromo.shared.openDownloadPage()
     }
     
     func showPanelNearCursor() {
-        Task { @MainActor in
-            showPanelWindow(nearCursor: true)
-        }
+        showPanelWindow(nearCursor: true)
     }
     
     @MainActor
     private func showPanelWindow(nearCursor: Bool = false) {
+        #if DEBUG
+        print("Clippy: opening clipboard window")
+        #endif
         // Store the currently active application before we take focus
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
             AppDelegate.previousActiveApp = frontApp
         }
         
-        // Close existing window
+        // Close existing window and remove both kinds of event monitor.
         panelWindow?.close()
+        if let monitor = localPanelMonitor {
+            NSEvent.removeMonitor(monitor)
+            localPanelMonitor = nil
+        }
         
         // Remove old monitor if exists
         if let monitor = eventMonitor {
@@ -264,8 +317,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Position panel
         positionPanel(panel, nearCursor: nearCursor)
         
-        // Show the panel with animation
+        // Activate explicitly so the shortcut also works after every window closes.
+        panel.title = "Clippy Clipboard"
         panel.alphaValue = 0
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -274,10 +329,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         panelWindow = panel
+        #if DEBUG
+        print("Clippy: clipboard window visible: \(panel.isVisible)")
+        #endif
         
         // Show media bar at bottom of screen
         showMediaBar()
         
+        // Global monitors only see other apps. Local events include Settings
+        // and must pass through after dismissing the clipboard.
+        mediaDismissScroll = 0
+        localPanelMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .scrollWheel]) { [weak self] event in
+            guard let self else { return event }
+            if event.type == .scrollWheel {
+                if let media = self.mediaBarWindow, event.window === media,
+                   abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
+                    guard event.momentumPhase.isEmpty else { return nil }
+                    if event.phase.contains(.began) { self.mediaDismissScroll = 0 }
+                    // Wheel deltas are lines, while trackpad deltas are points.
+                    self.mediaDismissScroll += abs(event.scrollingDeltaY) * (event.hasPreciseScrollingDeltas ? 1 : 20)
+                    if self.mediaDismissScroll >= 20 { self.hideMediaBar() }
+                    return nil
+                }
+                self.mediaDismissScroll = 0
+                return event
+            }
+            if let panel = self.panelWindow, event.window !== panel,
+               event.window?.parent !== panel, event.window !== self.mediaBarWindow {
+                self.hidePanel()
+            }
+            return event
+        }
+
         // Monitor for clicks outside to close
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             // Check if click is inside media bar
@@ -403,19 +486,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func hidePanel() {
+        if let monitor = localPanelMonitor {
+            NSEvent.removeMonitor(monitor)
+            localPanelMonitor = nil
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
         
         if let panel = panelWindow {
+            // Detach immediately. An old fade-out must not clear a newly opened panel.
+            panelWindow = nil
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.1
                 context.timingFunction = CAMediaTimingFunction(name: .easeIn)
                 panel.animator().alphaValue = 0
             }, completionHandler: {
                 panel.close()
-                self.panelWindow = nil
             })
         }
         
@@ -510,12 +598,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    @objc private func openTextAI() { showAIPanelNearCursor() }
+
     @objc private func openPenguinCreator() {
         PenguinCreatorWindowController.shared.showCreator()
     }
 
     @objc private func openSettings() {
         hidePanel()
+        hideAIPanel()
         SettingsWindowController.shared.showSettings()
     }
     
@@ -526,6 +617,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func quitApp() {
+        AIChatService.shared.cancel()
+        CodexConnection.shared.stop()
         NSApp.terminate(nil)
     }
     
@@ -537,7 +630,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showPanelNearCursor()
         }
         hotkeyHandler.onAIHotkeyPressed = { [weak self] in
-            // Show AI panel near cursor when triggered by Cmd+Shift+CapsLock
+            // Open the optional text panel from its shortcut.
             self?.showAIPanelNearCursor()
         }
         hotkeyHandler.onPenguinHotkeyPressed = { [weak self] in
@@ -569,16 +662,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - AI Panel
     
     func showAIPanelNearCursor() {
-        Task { @MainActor in
-            showAIPanelWindow(nearCursor: true)
-        }
+        showAIPanelWindow(nearCursor: true)
     }
     
     @MainActor
     private func showAIPanelWindow(nearCursor: Bool = false) {
-        #if APP_STORE
-        return // Streaming keystroke insertion belongs to the direct-download edition.
-        #endif
         // Store the currently active application before we take focus
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -601,7 +689,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 set: { if !$0 { self.hideAIPanel() } }
             ),
             onSubmit: { [weak self] prompt in
-                // Activate previous app and start streaming, but keep panel open for spinner
+                // Keep the submitted answer in Clippy for explicit copying.
                 self?.submitAIPromptKeepPanel(prompt)
             },
             onHide: { [weak self] in
@@ -617,9 +705,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create a hosting controller
         let hostingController = NSHostingController(rootView: aiPanelView)
         
-        // Create a borderless panel window - smaller for just input
+        // Keep the prompt and answer together in a floating panel.
         let panel = FloatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 48),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 380),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -637,7 +725,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Position panel near cursor
         positionAIPanel(panel, nearCursor: nearCursor)
         
-        // Show the panel
+        panel.title = "Ask Clippy"
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         
         aiPanelWindow = panel
@@ -649,8 +738,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func positionAIPanel(_ panel: NSWindow, nearCursor: Bool = false) {
-        let panelWidth: CGFloat = 400
-        let panelHeight: CGFloat = 48
+        let panelWidth: CGFloat = 520
+        let panelHeight: CGFloat = 380
         
         let mouseLocation = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouseLocation, $0.frame, false) } ?? NSScreen.main
@@ -669,57 +758,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
     
-    /// Hides panels, activates previous app, and starts streaming the AI response
+    @MainActor
     func submitAIPromptAndStream(_ prompt: String) {
-        let previousApp = AppDelegate.previousActiveApp
-        
-        // Hide both panels (whichever is open)
-        hideAIPanel()
-        hidePanel()
-        
-        // Activate the previous app
-        if let app = previousApp {
-            app.activate()
-        }
-        
-        // Wait longer for app to fully activate and focus input before streaming
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            AIChatService.shared.sendMessageAndStream(prompt) {
-                print("AI streaming complete")
-            }
-        }
-    }
-    
-    /// Shows the AI panel and immediately submits a prompt (used from clipboard panel sparkle button)
-    func showAIPanelAndSubmit(_ prompt: String) {
-        AIChatService.shared.prepareForStreaming()
-        
-        Task { @MainActor in
-            showAIPanelWindow(nearCursor: true)
-            submitAIPromptKeepPanel(prompt)
-        }
+        showAIPanelAndSubmit(prompt)
     }
 
-    /// Activates previous app and starts streaming, but keeps AI panel open for spinner
-    func submitAIPromptKeepPanel(_ prompt: String) {
-        let previousApp = AppDelegate.previousActiveApp
-        
-        // Show spinner immediately before any delay
-        AIChatService.shared.prepareForStreaming()
-        
-        // Activate the previous app (but keep AI panel visible)
-        if let app = previousApp {
-            app.activate()
-        }
-        
-        // Wait for app to fully activate and focus input before streaming
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            AIChatService.shared.sendMessageAndStream(prompt) {
-                print("AI streaming complete")
-            }
-        }
+    @MainActor
+    func showAIPanelAndSubmit(_ prompt: String) {
+        showAIPanelWindow(nearCursor: true)
+        submitAIPromptKeepPanel(prompt)
     }
-    
+
+    @MainActor
+    func submitAIPromptKeepPanel(_ prompt: String) {
+        AIChatService.shared.sendMessageAndStream(prompt) {}
+    }
+
     func hideAIPanel() {
         if let monitor = aiEventMonitor {
             NSEvent.removeMonitor(monitor)
@@ -734,7 +788,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+    override var canBecomeMain: Bool { true }
     
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
@@ -764,6 +818,82 @@ extension NSApplication {
 }
 
 #if DEBUG
+// Native regression checks exercise the real local event monitor and window
+// delegates. No clipboard monitor, hotkeys, login item or updater is started.
+extension AppDelegate {
+    @MainActor private func runWindowRegressionChecks() async {
+        func pause() async { try? await Task.sleep(nanoseconds: 300_000_000) }
+        func check(_ passed: Bool, _ message: String) {
+            print("\(passed ? "PASS" : "FAIL"): \(message)")
+            if !passed { exit(1) }
+        }
+        NSApp.setActivationPolicy(.regular)
+        SettingsWindowController.shared.showSettings()
+        // macOS can deny foreground activation to a background CLI launch.
+        // Focus checks require selecting this test app first, not a fake key event.
+        print("Waiting for the test app to become active…")
+        for _ in 0..<100 {
+            if NSApp.isActive { break }
+            await pause()
+        }
+        check(NSApp.isActive, "Native test app has foreground focus")
+        await pause()
+        guard let settingsWindow = NSApp.windows.first(where: { $0.title == "Clippy Settings" }) else {
+            check(false, "Settings window exists"); return
+        }
+        showPanelWindow(nearCursor: false)
+        await pause()
+        check(panelWindow?.isVisible == true, "Clipboard opens alongside Settings")
+        // A normal local mouse event must close Clipboard and still reach Settings.
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: 300, y: 20),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: settingsWindow.windowNumber, context: nil, eventNumber: 1,
+                clickCount: 1, pressure: 1) {
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
+        await pause()
+        check(panelWindow == nil && settingsWindow.isVisible, "Clicking Settings dismisses Clipboard")
+        showPanelWindow(nearCursor: false)
+        await pause()
+        settingsWindow.makeKeyAndOrderFront(nil)
+        await pause()
+        check(panelWindow == nil, "Returning keyboard focus to Settings dismisses Clipboard")
+        showPanelWindow(nearCursor: false)
+        hidePanel()
+        showPanelWindow(nearCursor: false)
+        await pause()
+        check(panelWindow?.isVisible == true, "An old close animation cannot hide a new Clipboard window")
+        hidePanel()
+        SettingsWindowController.shared.hide()
+        let manager = ClipboardManager.shared
+        let queue = RecentMediaQueue.shared
+        let expansion = RecentMediaStackExpansion.shared
+        let first = ClipboardItem(contentType: .fileURL, fileURLString: "file:///tmp/clippy-window-test-first.png")
+        let second = ClipboardItem(contentType: .fileURL, fileURLString: "file:///tmp/clippy-window-test-second.png")
+        manager.addItem(first)
+        manager.addItem(second)
+        RecentMediaWindowController.shared.start()
+        expansion.reveal(2)
+        await pause()
+        check(RecentMediaWindowController.shared.panelFrame != nil, "Expanded media shelf is visible")
+        queue.dismiss(first)
+        queue.dismiss(second)
+        await pause()
+        check(RecentMediaWindowController.shared.panelFrame == nil, "Dismissing the last expanded tile hides the shelf")
+        check(manager.items.count == 2, "Dismissing media preserves clipboard history")
+        queue.enqueue(first)
+        await pause()
+        check(RecentMediaWindowController.shared.panelFrame != nil, "A fresh media copy reveals the shelf again")
+        expansion.hide()
+        await pause()
+        try? FileManager.default.removeItem(at: ClipboardItem.storageDirectoryURL)
+        print("Window regression checks passed.")
+        exit(0)
+    }
+}
+
 // Real SwiftUI views with isolated, synthetic history for reproducible listing assets.
 // This mode never starts clipboard monitoring or touches the user's history.
 extension AppDelegate {

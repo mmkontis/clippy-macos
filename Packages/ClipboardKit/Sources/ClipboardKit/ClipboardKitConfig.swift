@@ -29,7 +29,7 @@ public enum ClipboardKitConfig {
 
 
     /// Hosts may supply their own history limit; Coworker retains the default.
-    public static var maximumHistoryItems: () -> Int = { 400 }
+    public static var maximumHistoryItems: () -> Int = { 1_000 }
 
     /// Folder name (under `~/Library/Application Support/`) where the package
     /// stores `history.json` and an `images/` directory. Each host app picks
@@ -39,7 +39,7 @@ public enum ClipboardKitConfig {
     public static var storageFolderName: String = "ClipboardKit"
 
     /// Returns whether the bottom-left recent-media stack should auto-dismiss
-    /// the top tile when the user presses ⌘V / ⌃V in another app. The host's
-    /// settings store decides this — by default we always dismiss.
+    /// the copied tiles when the user presses ⌘V. Unrelated media stays visible.
+    /// The host's settings store decides this; the default is enabled.
     public static var dismissOnPasteEnabled: () -> Bool = { true }
 }

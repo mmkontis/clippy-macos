@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 : "${CLIPPY_APPLE_TEAM:?Set the verified Univation signing Team ID}"
 : "${CLIPPY_APP_GROUP:?Set the registered, provisioned App Group identifier}"
 : "${CLIPPY_STORE_PROFILE:?Set the Mac App Store provisioning profile name}"
+python3 scripts/fetch-codex.py
 xcodebuild -project Clippy.xcodeproj -scheme ClippyStore -configuration Release \
   -derivedDataPath build-store -destination 'generic/platform=macOS' -archivePath release/ClippyStore.xcarchive \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO \

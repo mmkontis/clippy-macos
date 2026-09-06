@@ -28,9 +28,12 @@ struct MediaBarView: View {
                                 hoveredIndex: hoveredIndex,
                                 onPaste: { pasteItem(item) }
                             )
+                            .frame(width: 90, height: 100, alignment: .bottom)
+                            .contentShape(Rectangle())
                             .onHover { isHovered in
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    hoveredIndex = isHovered ? index : nil
+                                    if isHovered { hoveredIndex = index }
+                                    else if hoveredIndex == index { hoveredIndex = nil }
                                 }
                             }
                             .id(index)
@@ -41,7 +44,7 @@ struct MediaBarView: View {
                     .frame(minHeight: 100, alignment: .bottom)
                 }
                 .background(
-                    Color(nsColor: .windowBackgroundColor)
+                    ClippySurfaceBackground()
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
@@ -68,6 +71,7 @@ struct MediaBarView: View {
             .padding(.bottom, 8)
         }
         .frame(height: 140, alignment: .bottom)
+        .onChange(of: mediaItems.map(\.id)) { _, _ in hoveredIndex = nil }
     }
     
     private func navigate(offset: Int, scrollProxy: ScrollViewProxy) {
@@ -89,11 +93,11 @@ struct MediaBarView: View {
     
     private func pasteItem(_ item: ClipboardItem) {
         ClipboardMonitor.shared.pauseMonitoring()
-        item.copyToPasteboard()
+        ClipboardManager.shared.pasteItem(item)
         
         if let callback = onPasteItem {
             callback(item)
-        } else if let appDelegate = NSApp.delegate as? AppDelegate {
+        } else if let appDelegate = AppDelegate.shared {
             appDelegate.pasteAndHide()
         }
     }

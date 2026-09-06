@@ -18,11 +18,11 @@
 ### Copy. Find. Reuse.
 
 1. Open Clippy. The welcome screen takes a moment and is optional.
-2. Copy anything. Press **⌘⇧V** to search your history.
+2. Copy anything. Press **⌘⇧V** to search your history (or the shortcut shown in Settings).
 3. Choose an item and paste. Enable optional Accessibility for automatic paste.
 
 History stays on your Mac. Updated Clippy and Coworker builds automatically combine it, without an account. The Coworker dictation banner is optional and dismissible.
 
-**Optional AI:** Off by default. AI features use online services; voice needs your own Gemini key. [Privacy details](PRIVACY.md).
+**Optional text AI (1.3 source):** Use your OpenAI API key or connect your ChatGPT account. No voice recording. The current download is still 1.2.0. [Privacy details](PRIVACY.md).
 
 [Build it yourself](DEVELOPMENT.md) · [Report an issue](https://github.com/mmkontis/clippy-macos/issues) · [MIT license](LICENSE)

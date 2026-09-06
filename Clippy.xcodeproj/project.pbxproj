@@ -40,8 +40,7 @@
 		AC13306F6642C38C88768E1A /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6ED6E3C3272C97E6D4AF5C3D /* Cocoa.framework */; };
 		B1000001 /* FloatingPenguinWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001 /* FloatingPenguinWindow.swift */; };
 		B1000002 /* PenguinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000002 /* PenguinView.swift */; };
-		C1000001 /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000001 /* AudioService.swift */; };
-		C1000002 /* GeminiLiveWebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000002 /* GeminiLiveWebSocketClient.swift */; };
+		C1000002 /* CodexConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000002 /* CodexConnection.swift */; };
 		C1100001 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = C2200001 /* Resources */; };
 		D1000001 /* PenguinCustomization.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000001 /* PenguinCustomization.swift */; };
 		D1000002 /* PenguinCreatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000002 /* PenguinCreatorView.swift */; };
@@ -49,8 +48,7 @@
 		E1000002 /* ClipboardKit in Frameworks */ = {isa = PBXBuildFile; productRef = E2000002 /* ClipboardKit */; };
 		E1758000EB620907719E2483 /* ClipboardItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000007 /* ClipboardItemRow.swift */; };
 		E5741BF6297B2F2D8DF4DD68 /* ClippyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* ClippyApp.swift */; };
-		EC90508555BE7D70F5B7A91E /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000001 /* AudioService.swift */; };
-		ED115636A6814076A5944F79 /* GeminiLiveWebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000002 /* GeminiLiveWebSocketClient.swift */; };
+		ED115636A6814076A5944F79 /* CodexConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000002 /* CodexConnection.swift */; };
 		F1000001 /* UpdaterDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000001 /* UpdaterDelegate.swift */; };
 		F2F48A03A9217D3223A50271 /* AIChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A160D6A219E99068D2F38B7 /* AIChatService.swift */; };
 /* End PBXBuildFile section */
@@ -76,8 +74,7 @@
 		A3000001 /* Clippy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clippy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B2000001 /* FloatingPenguinWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPenguinWindow.swift; sourceTree = "<group>"; };
 		B2000002 /* PenguinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenguinView.swift; sourceTree = "<group>"; };
-		C2000001 /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
-		C2000002 /* GeminiLiveWebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiLiveWebSocketClient.swift; sourceTree = "<group>"; };
+		C2000002 /* CodexConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexConnection.swift; sourceTree = "<group>"; };
 		C2200001 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
 		D2000001 /* PenguinCustomization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenguinCustomization.swift; sourceTree = "<group>"; };
 		D2000002 /* PenguinCreatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenguinCreatorView.swift; sourceTree = "<group>"; };
@@ -161,8 +158,7 @@
 				A2000013 /* AppSettings.swift */,
 				3A160D6A219E99068D2F38B7 /* AIChatService.swift */,
 				B2000001 /* FloatingPenguinWindow.swift */,
-				C2000001 /* AudioService.swift */,
-				C2000002 /* GeminiLiveWebSocketClient.swift */,
+				C2000002 /* CodexConnection.swift */,
 				F2000001 /* UpdaterDelegate.swift */,
 			);
 			path = Services;
@@ -204,6 +200,7 @@
 				03C23FA192B0F74202DE55DF /* Sources */,
 				0688C98291BC3481DC77C1E9 /* Frameworks */,
 				F08D8B6FF3AD962614DA3ED3 /* Resources */,
+                C0DE0001 /* Embed Codex */,
 			);
 			buildRules = (
 			);
@@ -224,6 +221,7 @@
 				A6000002 /* Sources */,
 				A4000001 /* Frameworks */,
 				A6000003 /* Resources */,
+                C0DE0001 /* Embed Codex */,
 			);
 			buildRules = (
 			);
@@ -297,6 +295,21 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+        C0DE0001 /* Embed Codex */ = {
+            isa = PBXShellScriptBuildPhase;
+            alwaysOutOfDate = 1;
+            buildActionMask = 2147483647;
+            files = ();
+            inputPaths = ("$(SRCROOT)/scripts/embed-codex.sh", "$(SRCROOT)/.build/codex/$(CLIPPY_CODEX_ARCH)/codex", "$(SRCROOT)/Clippy/CodexHelper.entitlements");
+            outputPaths = ("$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers", "$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/codex");
+            name = "Embed Codex";
+            runOnlyForDeploymentPostprocessing = 0;
+            shellPath = /bin/sh;
+            shellScript = "/bin/sh \"$SRCROOT/scripts/embed-codex.sh\"";
+        };
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		03C23FA192B0F74202DE55DF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -316,8 +329,7 @@
 				F2F48A03A9217D3223A50271 /* AIChatService.swift in Sources */,
 				746A2D4541036596271647F6 /* FloatingPenguinWindow.swift in Sources */,
 				0039F3B10BD8E641DF2C66B3 /* PenguinView.swift in Sources */,
-				EC90508555BE7D70F5B7A91E /* AudioService.swift in Sources */,
-				ED115636A6814076A5944F79 /* GeminiLiveWebSocketClient.swift in Sources */,
+				ED115636A6814076A5944F79 /* CodexConnection.swift in Sources */,
 				7C0EAE0DA38CFF4CBAE48006 /* PenguinCustomization.swift in Sources */,
 				0B27A4292008C2D7904EFEEE /* PenguinCreatorView.swift in Sources */,
 				A44AE51E613733FF8AFB84B4 /* UpdaterDelegate.swift in Sources */,
@@ -342,8 +354,7 @@
 				0DEF9BFA0243399246EAC0C0 /* AIChatService.swift in Sources */,
 				B1000001 /* FloatingPenguinWindow.swift in Sources */,
 				B1000002 /* PenguinView.swift in Sources */,
-				C1000001 /* AudioService.swift in Sources */,
-				C1000002 /* GeminiLiveWebSocketClient.swift in Sources */,
+				C1000002 /* CodexConnection.swift in Sources */,
 				D1000001 /* PenguinCustomization.swift in Sources */,
 				D1000002 /* PenguinCreatorView.swift in Sources */,
 				F1000001 /* UpdaterDelegate.swift in Sources */,
@@ -362,7 +373,8 @@
 				CODE_SIGN_ENTITLEMENTS = Clippy/ClippyStore.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CLIPPY_CODEX_ARCH = universal;
+                CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 3JN6A5RJ38;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -373,7 +385,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.univation.clippy;
 				PRODUCT_NAME = Clippy;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) APP_STORE";
@@ -508,7 +520,8 @@
 				CODE_SIGN_ENTITLEMENTS = Clippy/Clippy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CLIPPY_CODEX_ARCH = universal;
+                CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 3JN6A5RJ38;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -519,7 +532,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.clippy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -535,7 +548,8 @@
 				CODE_SIGN_ENTITLEMENTS = Clippy/Clippy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CLIPPY_CODEX_ARCH = universal;
+                CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 3JN6A5RJ38;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -546,7 +560,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.clippy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -563,7 +577,8 @@
 				CODE_SIGN_ENTITLEMENTS = Clippy/ClippyStore.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CLIPPY_CODEX_ARCH = universal;
+                CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 3JN6A5RJ38;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -574,7 +589,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.univation.clippy;
 				PRODUCT_NAME = Clippy;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) APP_STORE";

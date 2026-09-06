@@ -9,6 +9,21 @@ import AppKit
 public final class RecentMediaStackExpansion: ObservableObject {
     public static let shared = RecentMediaStackExpansion()
     @Published public internal(set) var revealCount: Int = 0
+    @Published public private(set) var isHidden = false
+    public func hide() {
+        isHidden = true
+        collapse()
+        RecentMediaPreviewController.shared.hidePreview()
+        RecentMediaProjectMenuController.shared.hide()
+    }
+    public func showRecent() {
+        isHidden = false
+        collapse()
+    }
+    func reveal(_ count: Int) {
+        isHidden = false
+        revealCount = count
+    }
     public var isExpanded: Bool { revealCount > 0 }
     public func collapse() { if revealCount != 0 { revealCount = 0 } }
     private init() {}
@@ -28,13 +43,14 @@ public struct RecentMediaStackView: View {
     }
 
     private var historyMedia: [ClipboardItem] {
-        manager.items.filter(\.isDraggableMedia)
+        queue.visibleHistory(from: manager.items)
     }
 
     /// Newest-first, so rendered top-to-bottom = newest on top, oldest at the
     /// bottom (corner). Collapsed shows the session queue; revealed shows the
     /// newest `revealCount` images from history.
     private var displayItems: [ClipboardItem] {
+        if expansion.isHidden { return [] }
         if expansion.revealCount > 0 {
             return Array(historyMedia.prefix(expansion.revealCount))
         }
@@ -58,11 +74,7 @@ public struct RecentMediaStackView: View {
     }
 
     private func dismiss(_ item: ClipboardItem) {
-        if queue.items.contains(where: { $0.id == item.id }) {
-            queue.dismiss(item)
-        } else {
-            ClipboardManager.shared.removeItem(item)
-        }
+        queue.dismiss(item)
     }
 }
 

@@ -1,391 +1,333 @@
 import AppKit
 import Foundation
-import IOKit
 
-/// Service for streaming AI chat completions
-class AIChatService: ObservableObject {
+enum AIProvider: String, CaseIterable, Identifiable {
+    case none, openAI, chatGPT
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .none: return "Off"
+        case .openAI: return "OpenAI API key"
+        case .chatGPT: return "ChatGPT account"
+        }
+    }
+    static var selected: AIProvider {
+        AIProvider(rawValue: UserDefaults.standard.string(forKey: "textAIProvider") ?? "") ?? .none
+    }
+}
+
+enum TextAIError: LocalizedError {
+    case message(String)
+    var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+}
+
+/// Only the text explicitly submitted by the user goes to the selected provider.
+@MainActor
+final class AIChatService: ObservableObject {
     static let shared = AIChatService()
-
-    private let apiURL = "https://humanlike-node-production.up.railway.app/ai/chat"
-
     @Published var isStreaming = false
     @Published var error: String?
-    @Published var streamedText: String = ""
-    @Published var rateLimitError: String?
-    @Published var lastPrompt: String = ""
+    @Published var streamedText = ""
+    @Published var lastPrompt = ""
+    @Published private(set) var lastUsage: TextTokenUsage?
+    private var requestTask: Task<Void, Never>?
+    private var requestID = UUID()
+    private let session: URLSession
 
-    /// Call this immediately when user submits to show spinner right away
+    init(session: URLSession = URLSession(configuration: .ephemeral)) {
+        self.session = session
+    }
+
     func prepareForStreaming() {
-        DispatchQueue.main.async {
-            self.isStreaming = true
-            self.error = nil
-            self.streamedText = ""
-            self.rateLimitError = nil
-        }
+        error = nil
+        streamedText = ""
     }
 
-    private var currentSession: URLSession?
-    private var currentTask: URLSessionDataTask?
-
-    // Queue for serializing paste operations
-    private let pasteQueue = DispatchQueue(label: "com.clippy.paste", qos: .userInteractive)
-    private var pendingChunks: [String] = []
-    private var isPasting = false
-    private var isFirstChunk = true
-
-    private init() {}
-
-    // MARK: - Device ID
-
-    /// Gets or generates a persistent device ID for rate limiting
-    private func getDeviceID() -> String {
-        let key = "ClippyDeviceID"
-        if let existing = UserDefaults.standard.string(forKey: key) {
-            return existing
-        }
-        // Generate a new UUID for testing (bypassing hardware UUID)
-        let deviceID = UUID().uuidString
-        UserDefaults.standard.set(deviceID, forKey: key)
-        return deviceID
-    }
-
-    /// Gets the Mac's hardware UUID
-    private func getHardwareUUID() -> String? {
-        let platformExpert = IOServiceGetMatchingService(
-            kIOMainPortDefault,
-            IOServiceMatching("IOPlatformExpertDevice")
-        )
-        defer { IOObjectRelease(platformExpert) }
-
-        guard platformExpert != 0 else { return nil }
-
-        guard
-            let uuidCF = IORegistryEntryCreateCFProperty(
-                platformExpert,
-                kIOPlatformUUIDKey as CFString,
-                kCFAllocatorDefault,
-                0
-            )?.takeRetainedValue() as? String
-        else {
-            return nil
-        }
-
-        return uuidCF
-    }
-
-    /// Sends a message and streams the response by pasting each chunk as it arrives
     func sendMessageAndStream(_ message: String, onComplete: @escaping () -> Void) {
-        // Cancel any existing request.
         cancel()
-        guard UserDefaults.standard.bool(forKey: "cloudAIEnabled") else {
-            DispatchQueue.main.async {
-                self.isStreaming = false
-                self.error = "Enable optional AI paste in Settings to send prompts to Humanlike."
-                SettingsWindowController.shared.showSettings()
-                onComplete()
-            }
+        let prompt = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { onComplete(); return }
+        guard prompt.utf8.count <= 100_000 else {
+            error = "Please send a shorter prompt (up to 100 KB)."
+            onComplete()
             return
         }
-
-        // Reset state
-        pendingChunks = []
-        isPasting = false
-        isFirstChunk = true
-
-        DispatchQueue.main.async {
-            self.isStreaming = true
-            self.error = nil
-            self.streamedText = ""
-            self.lastPrompt = message
-        }
-
-        guard let url = URL(string: apiURL) else {
-            DispatchQueue.main.async {
-                self.error = "Invalid URL"
-                self.isStreaming = false
-                onComplete()
-            }
+        let provider = AIProvider.selected
+        guard provider != .none else {
+            error = "Choose an OpenAI API key or connect ChatGPT in Settings."
+            SettingsWindowController.shared.showSettings()
+            onComplete()
             return
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(getDeviceID(), forHTTPHeaderField: "X-Device-ID")
-
-        let body: [String: Any] = [
-            "messages": [
-                ["role": "user", "content": message]
-            ],
-            "stream": true,
-        ]
-
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        } catch {
-            DispatchQueue.main.async {
-                self.error = "Failed to encode request"
-                self.isStreaming = false
-                onComplete()
-            }
-            return
-        }
-
-        // Use URLSession with delegate for streaming
-        let delegate = StreamingDelegate(
-            onChunk: { [weak self] text in
-                self?.queueChunkForPasting(text)
-            },
-            onComplete: { [weak self] error in
-                DispatchQueue.main.async {
-                    self?.isStreaming = false
-                    if let error = error {
-                        self?.error = error.localizedDescription
+        let id = UUID()
+        requestID = id
+        lastPrompt = prompt
+        lastUsage = nil
+        streamedText = ""
+        error = nil
+        isStreaming = true
+        requestTask = Task {
+            do {
+                let answer: String
+                var usage: TextTokenUsage?
+                switch provider {
+                case .openAI:
+                    guard let key = OpenAICredentials.read(), !key.isEmpty else {
+                        throw TextAIError.message("Add your OpenAI API key in Settings first.")
                     }
-                    onComplete()
+                    let model = UserDefaults.standard.string(forKey: "openAITextModel") ?? "gpt-5.4-mini"
+                    let request = try Self.apiRequest(prompt: prompt, key: key, model: model)
+                    let (data, response) = try await session.data(for: request)
+                    usage = TextTokenUsage.api(data, model: model)
+                    answer = try Self.apiAnswer(data: data, response: response)
+                case .chatGPT:
+                    let model = UserDefaults.standard.string(forKey: "chatGPTTextModel")
+                    answer = try await CodexConnection.shared.reply(to: prompt, model: model)
+                    usage = CodexConnection.shared.lastUsage
+                case .none:
+                    return
                 }
-            },
-            onRateLimited: { [weak self] errorMessage in
-                DispatchQueue.main.async {
-                    self?.isStreaming = false
-                    self?.rateLimitError = errorMessage
-                }
+                try Task.checkCancellation()
+                guard requestID == id else { return }
+                streamedText = answer
+                lastUsage = usage
+                if provider == .chatGPT { Task { await AIModelCatalog.shared.refresh() } }
+            } catch {
+                guard requestID == id, !Task.isCancelled else { return }
+                // Never display raw provider responses, URLs, credentials, or process diagnostics.
+                self.error = (error as? TextAIError)?.errorDescription ?? "Couldn't get a reply. Check your connection and try again."
             }
-        )
-
-        currentSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        currentTask = currentSession?.dataTask(with: request)
-        currentTask?.resume()
+            guard requestID == id else { return }
+            isStreaming = false
+            requestTask = nil
+            onComplete()
+        }
     }
 
-    /// Cancels the current streaming request
     func cancel() {
-        currentTask?.cancel()
-        currentTask = nil
-        currentSession?.invalidateAndCancel()
-        currentSession = nil
-        pendingChunks = []
-        isPasting = false
-        DispatchQueue.main.async {
-            self.isStreaming = false
-        }
+        requestID = UUID()
+        requestTask?.cancel()
+        requestTask = nil
+        CodexConnection.shared.cancelReply()
+        isStreaming = false
     }
 
-    /// Queue a chunk for pasting - processes chunks one at a time
-    private func queueChunkForPasting(_ text: String) {
-        // Update streamed text for display in panel
-        DispatchQueue.main.async {
-            self.streamedText += text
-        }
-
-        pasteQueue.async { [weak self] in
-            self?.pendingChunks.append(text)
-            self?.processNextChunk()
-        }
+    func clear() {
+        cancel()
+        streamedText = ""
+        lastPrompt = ""
+        lastUsage = nil
+        error = nil
     }
 
-    /// Process the next chunk in the queue
-    private func processNextChunk() {
-        pasteQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.isPasting else { return }
-            guard !self.pendingChunks.isEmpty else { return }
+    static func apiRequest(prompt: String, key: String, model: String) throws -> URLRequest {
+        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, !key.contains("\n"), !key.contains("\r") else {
+            throw TextAIError.message("Check the API key and model in Settings.")
+        }
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": model, "input": prompt, "store": false,
+            "instructions": "You are Clippy, a concise text assistant. Answer the user's request. You cannot access their clipboard, files, microphone, or other apps.",
+            "max_output_tokens": 4096
+        ])
+        return request
+    }
 
-            self.isPasting = true
-            let chunk = self.pendingChunks.removeFirst()
-
-            // Paste this chunk
-            DispatchQueue.main.async {
-                self.pasteText(chunk) {
-                    self.pasteQueue.async {
-                        self.isPasting = false
-                        // Process next chunk if any
-                        if !self.pendingChunks.isEmpty {
-                            self.processNextChunk()
-                        }
-                    }
+    static func apiAnswer(data: Data, response: URLResponse) throws -> String {
+        guard let response = response as? HTTPURLResponse else {
+            throw TextAIError.message("OpenAI returned an unexpected response.")
+        }
+        switch response.statusCode {
+        case 200..<300: break
+        case 401, 403: throw TextAIError.message("OpenAI couldn't authorize this request. Check your API key and model access.")
+        case 429: throw TextAIError.message("Your OpenAI API quota or rate limit was reached. Check API billing or try again later.")
+        default: throw TextAIError.message("OpenAI couldn't complete the request (HTTP \(response.statusCode)). Try again later.")
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["status"] as? String == "completed",
+              let output = json["output"] as? [[String: Any]] else {
+            throw TextAIError.message("OpenAI didn't finish the answer. Try a shorter request.")
+        }
+        let answer = output.filter { $0["type"] as? String == "message" }
+            .flatMap { $0["content"] as? [[String: Any]] ?? [] }
+            .compactMap { item -> String? in
+                switch item["type"] as? String {
+                case "output_text": return item["text"] as? String
+                case "refusal": return item["refusal"] as? String
+                default: return nil
                 }
-            }
-        }
+            }.joined(separator: "\n")
+        guard !answer.isEmpty else { throw TextAIError.message("OpenAI returned no text. Try a different prompt.") }
+        return answer
     }
+}
 
-    /// Pastes text by putting it on clipboard and simulating Cmd+V
-    private func pasteText(_ text: String, completion: @escaping () -> Void) {
-        let wasFirst = isFirstChunk
-        isFirstChunk = false
+struct AIModelOption: Identifiable, Equatable {
+    let id: String
+    let title: String
+    var isDefault = false
+}
 
-        // For first chunk: click to ensure focus, wait, then set clipboard and paste
-        // For subsequent chunks: just set clipboard and paste quickly
-        if wasFirst {
-            // First chunk: simulate a click to ensure the target app has keyboard focus
-            simulateClick()
+struct TextTokenUsage: Equatable {
+    let provider: AIProvider
+    let model: String
+    let input: Int
+    let output: Int
+    let cached: Int
+    var total: Int { input + output }
 
-            // Wait for click to register, then set clipboard and paste
-            DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.15) {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(text, forType: .string)
-
-                // Additional delay after setting clipboard for first paste
-                DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.2) {
-                    self.simulatePaste()
-                    DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.1) {
-                        completion()
-                    }
-                }
-            }
-        } else {
-            // Subsequent chunks: quick paste
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-
-            DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.02) {
-                self.simulatePaste()
-                DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.05) {
-                    completion()
-                }
-            }
-        }
+    static func api(_ data: Data, model: String) -> TextTokenUsage? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let usage = json["usage"] as? [String: Any],
+              let input = usage["input_tokens"] as? Int,
+              let output = usage["output_tokens"] as? Int else { return nil }
+        let cached = (usage["input_tokens_details"] as? [String: Any])?["cached_tokens"] as? Int ?? 0
+        return .init(provider: .openAI, model: json["model"] as? String ?? model,
+                     input: max(0, input), output: max(0, output), cached: max(0, cached))
     }
+}
 
-    /// Simulates a mouse click at the current cursor position to ensure focus
-    private func simulateClick() {
-        #if APP_STORE
-        return
-        #endif
-        let mouseLocation = NSEvent.mouseLocation
-        // Convert to screen coordinates (flip Y)
-        guard let screen = NSScreen.main else { return }
-        let screenHeight = screen.frame.height
-        let clickPoint = CGPoint(x: mouseLocation.x, y: screenHeight - mouseLocation.y)
+struct AIUsageWindow: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let usedPercent: Int
+    let resetsAt: Date?
 
-        let source = CGEventSource(stateID: .combinedSessionState)
-        if let mouseDown = CGEvent(
-            mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: clickPoint,
-            mouseButton: .left)
-        {
-            mouseDown.post(tap: .cghidEventTap)
-        }
-        if let mouseUp = CGEvent(
-            mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: clickPoint,
-            mouseButton: .left)
-        {
-            mouseUp.post(tap: .cghidEventTap)
-        }
-    }
-
-    /// Simulates Cmd+V keystroke
-    private func simulatePaste() {
-        #if APP_STORE
-        return
-        #endif
-        let source = CGEventSource(stateID: .combinedSessionState)
-        source?.localEventsSuppressionInterval = 0.0
-
-        // V key = 0x09
-        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) {
-            keyDown.flags = .maskCommand
-            keyDown.post(tap: .cghidEventTap)
-        }
-
-        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
-            keyUp.flags = .maskCommand
-            keyUp.post(tap: .cghidEventTap)
+    static func parse(_ result: [String: Any]) -> [AIUsageWindow] {
+        let buckets: [String: [String: Any]]
+        if let all = result["rateLimitsByLimitId"] as? [String: [String: Any]], !all.isEmpty {
+            buckets = all
+        } else if let single = result["rateLimits"] as? [String: Any] {
+            buckets = [single["limitId"] as? String ?? "codex": single]
+        } else { return [] }
+        return buckets.keys.sorted().flatMap { key -> [AIUsageWindow] in
+            guard let bucket = buckets[key] else { return [] }
+            return ["primary", "secondary"].compactMap { kind in
+                guard let window = bucket[kind] as? [String: Any], let used = window["usedPercent"] as? Int else { return nil }
+                let minutes = window["windowDurationMins"] as? Int
+                let duration: String
+                if let minutes, minutes > 0 {
+                    if minutes % 1440 == 0 { duration = "\(minutes / 1440) days" }
+                    else if minutes % 60 == 0 { duration = "\(minutes / 60) hours" }
+                    else { duration = "\(minutes) minutes" }
+                } else { duration = kind == "primary" ? "Current window" : "Longer window" }
+                let name = bucket["limitName"] as? String ?? (key == "codex" ? "Codex" : key)
+                let reset = (window["resetsAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+                return .init(id: "\(key).\(kind)", title: "\(name) · \(duration)", usedPercent: max(0, used), resetsAt: reset)
+            }
         }
     }
 }
 
-// MARK: - Streaming Delegate
+/// Account-scoped discovery. Only the selection is saved; lists and quota data
+/// are fetched again on each launch and discarded when credentials change.
+@MainActor final class AIModelCatalog: ObservableObject {
+    static let shared = AIModelCatalog()
+    @Published private(set) var models: [AIModelOption] = []
+    @Published private(set) var windows: [AIUsageWindow] = []
+    @Published private(set) var isRefreshing = false
+    @Published private(set) var modelsError: String?
+    @Published private(set) var usageError: String?
+    @Published private(set) var refreshedAt: Date?
+    private var provider: AIProvider = .none
+    private var generation = UUID()
+    private let session: URLSession
 
-class StreamingDelegate: NSObject, URLSessionDataDelegate {
-    let onChunk: (String) -> Void
-    let onComplete: (Error?) -> Void
-    let onRateLimited: ((String) -> Void)?
-    private var buffer = Data()
-    private var responseError: Error?
-    private var isRateLimited = false
-    private var rateLimitBody = Data()
+    init(session: URLSession = URLSession(configuration: .ephemeral)) { self.session = session }
 
-    init(
-        onChunk: @escaping (String) -> Void, onComplete: @escaping (Error?) -> Void,
-        onRateLimited: ((String) -> Void)? = nil
-    ) {
-        self.onChunk = onChunk
-        self.onComplete = onComplete
-        self.onRateLimited = onRateLimited
+    static func selectionKey(_ provider: AIProvider) -> String {
+        provider == .chatGPT ? "chatGPTTextModel" : "openAITextModel"
     }
 
-    func urlSession(
-        _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
-        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
-    ) {
-        if let httpResponse = response as? HTTPURLResponse {
-            if httpResponse.statusCode == 429 {
-                isRateLimited = true
-            } else if !(200..<300).contains(httpResponse.statusCode) {
-                responseError = NSError(domain: "ClippyAI", code: httpResponse.statusCode,
-                    userInfo: [NSLocalizedDescriptionKey: "AI service returned HTTP \(httpResponse.statusCode). Please try again later."])
+    func invalidate() {
+        generation = UUID()
+        isRefreshing = false
+        models = []
+        windows = []
+        modelsError = nil
+        usageError = nil
+        refreshedAt = nil
+    }
+
+    func refresh() async {
+        let selected = AIProvider.selected
+        if isRefreshing, provider == selected { return }
+        if provider != selected { invalidate() }
+        provider = selected
+        guard selected != .none else { return }
+        let ticket = UUID()
+        generation = ticket
+        isRefreshing = true
+        modelsError = nil
+        defer { if generation == ticket { isRefreshing = false } }
+        do {
+            let fetched: [AIModelOption]
+            if selected == .chatGPT {
+                fetched = try await CodexConnection.shared.availableModels()
+            } else {
+                guard let key = OpenAICredentials.read(), !key.isEmpty, !key.contains("\n"), !key.contains("\r") else {
+                    throw TextAIError.message("Save your OpenAI API key to discover models.")
+                }
+                var request = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
+                request.timeoutInterval = 30
+                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw TextAIError.message("Couldn't fetch models. Check your key and connection, then refresh.")
+                }
+                fetched = try Self.apiModels(data)
+            }
+            guard generation == ticket, AIProvider.selected == selected else { return }
+            guard !fetched.isEmpty else { throw TextAIError.message("No text models were returned. Try refreshing.") }
+            models = fetched
+            let key = Self.selectionKey(selected)
+            let saved = UserDefaults.standard.string(forKey: key)
+            if !fetched.contains(where: { $0.id == saved }) {
+                let preferred = fetched.first(where: { $0.isDefault }) ?? fetched.first(where: { $0.id == "gpt-5.4-mini" }) ?? fetched[0]
+                UserDefaults.standard.set(preferred.id, forKey: key)
+            }
+            refreshedAt = Date()
+        } catch {
+            guard generation == ticket else { return }
+            modelsError = (error as? TextAIError)?.errorDescription ?? "Couldn't refresh models. Try again."
+        }
+        if selected == .chatGPT, generation == ticket {
+            do {
+                let result = try await CodexConnection.shared.readRateLimits()
+                guard generation == ticket, AIProvider.selected == selected else { return }
+                windows = AIUsageWindow.parse(result)
+                usageError = windows.isEmpty ? "Your account hasn't returned an allowance yet." : nil
+            } catch {
+                guard generation == ticket else { return }
+                windows = []
+                usageError = "Allowance unavailable. Refresh to try again."
             }
         }
-        completionHandler(.allow)
     }
 
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        // If rate limited, collect the error response body
-        if isRateLimited {
-            rateLimitBody.append(data)
-            return
-        }
-
-        guard responseError == nil else { return }
-        // Keep bytes until a complete line arrives, including split UTF-8 characters.
-        buffer.append(data)
-        processBuffer()
+    func updateLimits(_ result: [String: Any]) {
+        guard AIProvider.selected == .chatGPT else { return }
+        windows = AIUsageWindow.parse(result)
+        usageError = windows.isEmpty ? "Your account hasn't returned an allowance yet." : nil
     }
 
-    private func processBuffer(final: Bool = false) {
-        while let newline = buffer.firstIndex(of: 0x0A) {
-            let line = Data(buffer[..<newline])
-            buffer.removeSubrange(...newline)
-            processLine(line)
+    static func apiModels(_ data: Data) throws -> [AIModelOption] {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = object["data"] as? [[String: Any]] else {
+            throw TextAIError.message("OpenAI returned an unexpected model list.")
         }
-        if final && !buffer.isEmpty {
-            processLine(buffer)
-            buffer.removeAll()
-        }
-    }
-
-    private func processLine(_ data: Data) {
-        guard let line = String(data: data, encoding: .utf8), line.hasPrefix("data:") else { return }
-        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard payload != "[DONE]", let jsonData = payload.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let delta = choices.first?["delta"] as? [String: Any],
-              let content = delta["content"] as? String, !content.isEmpty else { return }
-        onChunk(content)
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?)
-    {
-        // Handle rate limit response
-        if isRateLimited {
-            var errorMessage = "Daily limit reached (10 requests/day)"
-            if let json = try? JSONSerialization.jsonObject(with: rateLimitBody) as? [String: Any],
-                let serverError = json["error"] as? String
-            {
-                errorMessage = serverError
-            }
-            onRateLimited?(errorMessage)
-            onComplete(nil)
-            return
-        }
-
-        // Process any remaining buffer
-        if error == nil && responseError == nil {
-            processBuffer(final: true)
-        }
-        onComplete(error ?? responseError)
+        // /models exposes IDs, not endpoint capabilities. Exclude recognizable
+        // non-text families; actual Responses access is still checked on send.
+        let excluded = ["audio", "realtime", "transcrib", "tts", "image", "search", "deep-research", "computer-use", "instruct", "chat-latest"]
+        let ids = Set(items.compactMap { $0["id"] as? String }.filter { id in
+            let family = id.hasPrefix("gpt-") || id.range(of: "^o[0-9]", options: .regularExpression) != nil
+            return family && !excluded.contains(where: { id.contains($0) })
+        })
+        return ids.sorted().map { AIModelOption(id: $0, title: $0) }
     }
 }

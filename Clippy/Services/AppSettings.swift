@@ -3,6 +3,18 @@ import Carbon
 import ServiceManagement
 import Security
 
+enum ClippyTheme: String, CaseIterable, Identifiable {
+    case solid, transparent, color
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+enum ClippyTint: String, CaseIterable, Identifiable {
+    case blue, lavender, mint, rose
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
 // MARK: - App Settings
 
 class AppSettings: ObservableObject {
@@ -18,6 +30,9 @@ class AppSettings: ObservableObject {
         didSet { saveSettings() }
     }
     
+    @Published var theme: ClippyTheme { didSet { saveSettings() } }
+    @Published var themeTint: ClippyTint { didSet { saveSettings() } }
+
     // History settings
     @Published var maxHistoryItems: Int {
         didSet { saveSettings() }
@@ -35,17 +50,38 @@ class AppSettings: ObservableObject {
         didSet { saveSettings() }
     }
     
-    // Launch at login setting
+    // Default on. An explicit choice in Settings persists across launches.
     @Published var launchAtLogin: Bool {
         didSet {
-            if launchAtLogin {
-                try? SMAppService.mainApp.register()
-            } else {
-                try? SMAppService.mainApp.unregister()
-            }
+            defaults.set(launchAtLogin, forKey: "launchAtLogin")
+            configureLaunchAtLogin()
         }
     }
-    
+    @Published private(set) var launchAtLoginMessage: String?
+
+    func configureLaunchAtLogin() {
+        #if DEBUG
+        // Listing and UI previews must never install a temporary build as a login item.
+        if CommandLine.arguments.contains("--preview-text-ai") || CommandLine.arguments.contains("--capture-listing") || CommandLine.arguments.contains("--no-login-item") { return }
+        #endif
+        launchAtLoginMessage = nil
+        do {
+            let service = SMAppService.mainApp
+            if launchAtLogin {
+                if service.status != .enabled && service.status != .requiresApproval {
+                    try service.register()
+                }
+                if service.status == .requiresApproval {
+                    launchAtLoginMessage = "Allow Clippy in System Settings → General → Login Items to finish enabling this."
+                }
+            } else if service.status == .enabled || service.status == .requiresApproval {
+                try service.unregister()
+            }
+        } catch {
+            launchAtLoginMessage = "Couldn't update Login Items. Check System Settings → General → Login Items."
+        }
+    }
+
     // Whether to suppress the accessibility permission alert (user clicked "Later")
     @Published var suppressAccessibilityAlert: Bool {
         didSet { saveSettings() }
@@ -57,9 +93,11 @@ class AppSettings: ObservableObject {
     }
     
     private init() {
+        self.theme = ClippyTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .solid
+        self.themeTint = ClippyTint(rawValue: defaults.string(forKey: "themeTint") ?? "") ?? .blue
         // Load saved settings or use defaults
         self.hotkeyModifiers = UInt32(defaults.integer(forKey: "hotkeyModifiers"))
-        self.hotkeyKeyCode = UInt32(defaults.integer(forKey: "hotkeyKeyCode"))
+        self.hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") == nil ? UInt32(kVK_ANSI_V) : UInt32(defaults.integer(forKey: "hotkeyKeyCode"))
         self.maxHistoryItems = defaults.integer(forKey: "maxHistoryItems")
         self.clearHistoryOnQuit = defaults.bool(forKey: "clearHistoryOnQuit")
         self.autoPaste = defaults.object(forKey: "autoPaste") != nil ? defaults.bool(forKey: "autoPaste") : true
@@ -68,14 +106,11 @@ class AppSettings: ObservableObject {
         self.suppressAccessibilityAlert = defaults.bool(forKey: "suppressAccessibilityAlert")
         self.hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         
-        self.launchAtLogin = SMAppService.mainApp.status == .enabled
+        self.launchAtLogin = defaults.object(forKey: "launchAtLogin") == nil ? true : defaults.bool(forKey: "launchAtLogin")
 
         // Set defaults if not set
         if hotkeyModifiers == 0 {
             hotkeyModifiers = UInt32(cmdKey | shiftKey)
-        }
-        if hotkeyKeyCode == 0 {
-            hotkeyKeyCode = UInt32(kVK_ANSI_V)
         }
         if maxHistoryItems == 0 {
             maxHistoryItems = 100
@@ -83,6 +118,8 @@ class AppSettings: ObservableObject {
     }
     
     func saveSettings() {
+        defaults.set(theme.rawValue, forKey: "theme")
+        defaults.set(themeTint.rawValue, forKey: "themeTint")
         defaults.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers")
         defaults.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode")
         defaults.set(maxHistoryItems, forKey: "maxHistoryItems")
@@ -101,18 +138,17 @@ class AppSettings: ObservableObject {
             defaults.removePersistentDomain(forName: bundleId)
         }
         
-        // Unregister from login items
-        try? SMAppService.mainApp.unregister()
-        
         // Reset in-memory values to defaults
         hotkeyModifiers = UInt32(cmdKey | shiftKey)
         hotkeyKeyCode = UInt32(kVK_ANSI_V)
         maxHistoryItems = 100
+        theme = .solid
+        themeTint = .blue
         clearHistoryOnQuit = false
         autoPaste = true
         showMediaBar = false
         dismissRecentOnPaste = true
-        launchAtLogin = false
+        launchAtLogin = true
         suppressAccessibilityAlert = false
         hasCompletedOnboarding = false
     }
@@ -121,11 +157,11 @@ class AppSettings: ObservableObject {
 
 
 
-// Optional voice credentials are stored in the user's macOS Keychain.
-enum VoiceCredentials {
+// Optional OpenAI credentials are stored in the user's macOS Keychain.
+enum OpenAICredentials {
     private static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.clippy.app.gemini",
+         kSecAttrService as String: "com.clippy.app.openai",
          kSecAttrAccount as String: "api-key"]
     }
 

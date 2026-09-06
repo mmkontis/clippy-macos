@@ -15,6 +15,7 @@ public final class RecentMediaWindowController {
     private var expansionCancellable: AnyCancellable?
     private var historyCancellable: AnyCancellable?
     private var pasteMonitor: Any?
+    private var localPasteMonitor: Any?
     private var scrollMonitorLocal: Any?
     private var scrollMonitorGlobal: Any?
     private var edgeMonitorLocal: Any?
@@ -28,26 +29,28 @@ public final class RecentMediaWindowController {
 
     // Reveal accumulators: scroll grows the stack one image per `revealScrollStep`
     // points; the bottom edge only opens after a sustained downward push.
-    private var scrollAccum: CGFloat = 0
+    private var scrollIntent = MediaShelfScrollIntent()
     private var bottomPushAccum: CGFloat = 0
-    private let revealScrollStep: CGFloat = 26
     private let bottomPushThreshold: CGFloat = 48
 
     private init() {}
 
     /// Screen frame of the stack panel, used to ignore clicks on tiles.
     public var panelFrame: NSRect? {
-        panel?.frame
+        panel?.isVisible == true ? panel?.frame : nil
     }
 
     public func start() {
+        guard cancellable == nil else { return }
         ensurePanel()
         cancellable = RecentMediaQueue.shared.$items
+            .combineLatest(RecentMediaQueue.shared.$dismissedIDs)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { @MainActor in self?.refresh(animated: true) }
             }
         expansionCancellable = RecentMediaStackExpansion.shared.$revealCount
+            .combineLatest(RecentMediaStackExpansion.shared.$isHidden)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { @MainActor in self?.refresh(animated: true) }
@@ -66,64 +69,56 @@ public final class RecentMediaWindowController {
     }
 
     /// Grows the stack one image at a time as the user scrolls over it, and
-    /// opens it on a sustained downward push at the bottom edge; collapses once
+    /// opens it on a sustained downward push at the bottom edge; upward scroll
+    /// hides the shelf without deleting history. Collapses once
     /// the cursor leaves. We extract the raw deltas synchronously (NSEvent isn't
     /// Sendable) and hop to the main actor with plain values.
     private func startStackInteractionMonitors() {
         guard scrollMonitorLocal == nil else { return }
 
         scrollMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
-            let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY
-            Task { @MainActor in self?.handleStackScroll(deltaY: dy) }
+            let input = MediaShelfScrollInput(event: event)
+            let point = NSEvent.mouseLocation
+            self?.handleStackScroll(input, at: point)
             return event
         }
         scrollMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
-            let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY
-            Task { @MainActor in self?.handleStackScroll(deltaY: dy) }
+            let input = MediaShelfScrollInput(event: event)
+            let point = NSEvent.mouseLocation
+            Task { @MainActor in self?.handleStackScroll(input, at: point) }
         }
         edgeMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-            let dy = event.deltaY
-            Task { @MainActor in self?.handlePointerMove(deltaY: dy) }
+            self?.handlePointerMove(deltaY: event.deltaY, at: NSEvent.mouseLocation)
             return event
         }
         edgeMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-            let dy = event.deltaY
-            Task { @MainActor in self?.handlePointerMove(deltaY: dy) }
+            let dy = event.deltaY, point = NSEvent.mouseLocation
+            Task { @MainActor in self?.handlePointerMove(deltaY: dy, at: point) }
         }
     }
 
-    private func handleStackScroll(deltaY: CGFloat) {
-        guard abs(deltaY) > 0.1 else { return }
+    private func handleStackScroll(_ input: MediaShelfScrollInput, at point: NSPoint) {
         guard hasClipboardMedia else { return }
 
         // Hit area: the live panel when it's on screen, otherwise the bottom-left
         // launch zone — so scrolling there opens the history even while hidden.
         let inHitArea: Bool
         if let panel, panel.isVisible {
-            inHitArea = NSPointInRect(NSEvent.mouseLocation, panel.frame)
+            inHitArea = NSPointInRect(point, panel.frame)
         } else if let visible = stackScreen()?.visibleFrame {
-            inHitArea = NSPointInRect(NSEvent.mouseLocation, stackLaunchZone(visible))
+            inHitArea = NSPointInRect(point, stackLaunchZone(visible))
         } else {
             return
         }
-        guard inHitArea else { return }
-
-        // Scroll down grows the stack, scroll up shrinks it. (Flip the sign here
-        // if it feels inverted.)
-        scrollAccum += -deltaY
-        while scrollAccum >= revealScrollStep {
-            scrollAccum -= revealScrollStep
-            adjustReveal(by: 1)
-        }
-        while scrollAccum <= -revealScrollStep {
-            scrollAccum += revealScrollStep
-            adjustReveal(by: -1)
+        switch scrollIntent.consume(input, inHitArea: inHitArea) {
+        case .hide: RecentMediaStackExpansion.shared.hide()
+        case .reveal: adjustReveal(by: 1)
+        case .none: break
         }
     }
 
-    private func handlePointerMove(deltaY: CGFloat) {
+    private func handlePointerMove(deltaY: CGFloat, at mouse: NSPoint) {
         guard hasClipboardMedia else { return }
-        let mouse = NSEvent.mouseLocation
         guard let visible = stackScreen()?.visibleFrame else { return }
 
         let column = stackColumnRect(visible)
@@ -134,7 +129,10 @@ public final class RecentMediaWindowController {
         // at a time — works whether the stack is hidden, collapsed, or already
         // expanded, so you can open it from nothing and keep pushing for more.
         if overColumn && atBottom {
-            bottomPushAccum += abs(deltaY)
+            // Only a downward push counts. Upward and sideways movement must
+            // not accidentally reveal a shelf the user just hid.
+            guard deltaY > 0 else { bottomPushAccum = 0; return }
+            bottomPushAccum += deltaY
             if bottomPushAccum >= bottomPushThreshold {
                 bottomPushAccum = 0
                 adjustReveal(by: 1)
@@ -147,6 +145,8 @@ public final class RecentMediaWindowController {
         // while a save dropdown opened from a tile is still up (it sits aside).
         if RecentMediaStackExpansion.shared.isExpanded, let panel, panel.isVisible {
             if RecentMediaProjectMenuController.shared.activeItemId != nil { return }
+            if let preview = RecentMediaPreviewController.shared.panelFrame,
+               NSPointInRect(mouse, preview.insetBy(dx: -12, dy: -12)) { return }
             if !NSPointInRect(mouse, panel.frame.insetBy(dx: -44, dy: -44)) {
                 RecentMediaStackExpansion.shared.collapse()
             }
@@ -164,14 +164,14 @@ public final class RecentMediaWindowController {
         var count = current == 0 ? base : current
         count = max(0, min(maxReveal, count + steps))
         let newValue = count > base ? count : 0
-        if newValue != current {
-            RecentMediaStackExpansion.shared.revealCount = newValue
+        if newValue != current || RecentMediaStackExpansion.shared.isHidden {
+            RecentMediaStackExpansion.shared.reveal(newValue)
         }
     }
 
     /// How many tiles fit in the usable screen height — the cap for revealing.
     private func maxRevealCount() -> Int {
-        let mediaCount = ClipboardManager.shared.items.lazy.filter(\.isDraggableMedia).count
+        let mediaCount = RecentMediaQueue.shared.visibleHistory(from: ClipboardManager.shared.items).count
         guard let visible = stackScreen()?.visibleFrame else { return mediaCount }
         let available = visible.height - 24 - outerPadding * 2
         let fit = Int((available + spacing) / (tileSize + spacing))
@@ -179,12 +179,12 @@ public final class RecentMediaWindowController {
     }
 
     private var hasClipboardMedia: Bool {
-        ClipboardManager.shared.items.contains(where: \.isDraggableMedia)
+        !RecentMediaQueue.shared.visibleHistory(from: ClipboardManager.shared.items).isEmpty
     }
 
     /// The screen the stack lives on (menu-bar screen), matching `applyLayout`.
     private func stackScreen() -> NSScreen? {
-        NSScreen.main
+        panel?.screen ?? NSScreen.main
             ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
             ?? NSScreen.screens.first
     }
@@ -199,25 +199,25 @@ public final class RecentMediaWindowController {
         NSRect(x: visible.minX, y: visible.minY, width: tileSize + outerPadding * 2, height: 220)
     }
 
-    /// Watches for global ⌘V / ⌃V keystrokes (in any other app) so we can pop
-    /// the top tile off the stack — the user has clearly "used" it. Whether
-    /// to act is decided by the host via `ClipboardKitConfig.dismissOnPasteEnabled`.
+    /// Dismiss only the media on the current pasteboard, including copies made
+    /// less than one polling interval ago. A text paste never consumes a tile.
     private func startPasteMonitor() {
         guard pasteMonitor == nil else { return }
-        pasteMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            guard ClipboardKitConfig.dismissOnPasteEnabled() else { return }
-            guard event.charactersIgnoringModifiers?.lowercased() == "v" else { return }
+        let pasted: (NSEvent) -> Void = { event in
+            guard ClipboardKitConfig.dismissOnPasteEnabled(), !event.isARepeat,
+                  event.keyCode == 9 || event.charactersIgnoringModifiers?.lowercased() == "v" else { return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            // ⌘⇧V is commonly the host's own hotkey — skip it so we don't
-            // dismiss anything when the user is opening the host's panel.
-            guard !flags.contains(.shift) else { return }
-            guard flags.contains(.command) || flags.contains(.control) else { return }
-
+            guard flags == .command else { return }
+            let change = NSPasteboard.general.changeCount
             Task { @MainActor in
-                if let top = RecentMediaQueue.shared.items.first {
-                    RecentMediaQueue.shared.dismiss(top)
-                }
+                ClipboardMonitor.shared.capturePendingCopy()
+                RecentMediaQueue.shared.dismissPastedMedia(changeCount: change)
             }
+        }
+        pasteMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: pasted)
+        localPasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            pasted(event)
+            return event
         }
     }
 
@@ -258,20 +258,16 @@ public final class RecentMediaWindowController {
 
         let expanded = RecentMediaStackExpansion.shared.isExpanded
         let hasContent = expanded
-            ? ClipboardManager.shared.items.contains(where: \.isDraggableMedia)
+            ? hasClipboardMedia
             : !RecentMediaQueue.shared.items.isEmpty
 
-        if !hasContent {
+        if !hasContent || RecentMediaStackExpansion.shared.isHidden {
             RecentMediaPreviewController.shared.hidePreview()
             if expanded { RecentMediaStackExpansion.shared.collapse() }
-            guard panel.isVisible else { return }
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.18
-                panel.animator().alphaValue = 0
-            }, completionHandler: {
-                panel.orderOut(nil)
-                panel.alphaValue = 1
-            })
+            // Synchronous dismissal avoids an old fade completion hiding fresh
+            // tiles that arrive while the previous queue is disappearing.
+            panel.orderOut(nil)
+            panel.alphaValue = 1
             return
         }
 
@@ -292,16 +288,14 @@ public final class RecentMediaWindowController {
 
         // Pick the screen whose menu bar is on it (the "main" one), falling back
         // to whichever screen currently contains the cursor.
-        let screen = NSScreen.main
-            ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
-            ?? NSScreen.screens.first
-        guard let visible = screen?.visibleFrame else { return }
+        guard let visible = stackScreen()?.visibleFrame else { return }
 
         let contentWidth: CGFloat = tileSize + outerPadding * 2
 
         // One tile per shown image; reveal count when expanded, else the queue.
         let reveal = RecentMediaStackExpansion.shared.revealCount
-        let count = reveal > 0 ? reveal : RecentMediaQueue.shared.items.count
+        let available = RecentMediaQueue.shared.visibleHistory(from: ClipboardManager.shared.items).count
+        let count = reveal > 0 ? min(reveal, available) : RecentMediaQueue.shared.items.count
         let height = CGFloat(count) * tileSize
             + CGFloat(max(0, count - 1)) * spacing
             + outerPadding * 2
@@ -325,5 +319,48 @@ public final class RecentMediaWindowController {
             ctx.allowsImplicitAnimation = true
             panel.animator().setFrame(target, display: true)
         }
+    }
+}
+
+/// Device-normalized input lets wheel and trackpad behavior share regression tests.
+struct MediaShelfScrollInput {
+    var deltaX: CGFloat
+    var deltaY: CGFloat
+    var precise: Bool
+    var momentum: Bool
+    var began: Bool
+    var timestamp: TimeInterval
+
+    init(deltaX: CGFloat = 0, deltaY: CGFloat, precise: Bool = true,
+         momentum: Bool = false, began: Bool = false, timestamp: TimeInterval = 0) {
+        self.deltaX = deltaX; self.deltaY = deltaY; self.precise = precise
+        self.momentum = momentum; self.began = began; self.timestamp = timestamp
+    }
+    init(event: NSEvent) {
+        self.init(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY,
+                  precise: event.hasPreciseScrollingDeltas, momentum: !event.momentumPhase.isEmpty,
+                  began: event.phase.contains(.began), timestamp: event.timestamp)
+    }
+}
+
+struct MediaShelfScrollIntent {
+    enum Action: Equatable { case none, reveal, hide }
+    private var accumulated: CGFloat = 0
+    private var lastTimestamp: TimeInterval = 0
+
+    mutating func consume(_ input: MediaShelfScrollInput, inHitArea: Bool) -> Action {
+        guard inHitArea else { accumulated = 0; return .none }
+        guard !input.momentum else { return .none }
+        guard abs(input.deltaY) > max(0.1, abs(input.deltaX)) else { accumulated = 0; return .none }
+        if input.began || input.timestamp - lastTimestamp > 0.4 || accumulated * input.deltaY < 0 {
+            accumulated = 0
+        }
+        lastTimestamp = input.timestamp
+        // One mouse-wheel notch suffices. Trackpads accumulate deliberate movement.
+        accumulated += input.deltaY * (input.precise ? 1 : 26)
+        guard abs(accumulated) >= 26 else { return .none }
+        let action: Action = accumulated > 0 ? .hide : .reveal
+        accumulated = 0
+        return action
     }
 }

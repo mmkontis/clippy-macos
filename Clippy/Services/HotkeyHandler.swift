@@ -9,7 +9,7 @@ class HotkeyHandler: ObservableObject {
     /// Callback when the clipboard hotkey is triggered
     var onHotkeyPressed: (() -> Void)?
     
-    /// Callback when the AI hotkey is triggered (Cmd+Shift+CapsLock)
+    /// Callback when the text AI hotkey is triggered (Cmd+Shift+C)
     var onAIHotkeyPressed: (() -> Void)?
     
     /// Callback when the penguin hotkey is triggered (Cmd+Shift+P)
@@ -17,6 +17,9 @@ class HotkeyHandler: ObservableObject {
     
     /// Whether the handler is active
     @Published private(set) var isActive = false
+    @Published private(set) var registrationMessage: String?
+    @Published private(set) var aiShortcutAvailable = false
+    @Published private(set) var companionShortcutAvailable = false
     
     /// Reference to the registered clipboard hotkey
     private var hotKeyRef: EventHotKeyRef?
@@ -29,21 +32,20 @@ class HotkeyHandler: ObservableObject {
     
     /// Event handler reference
     private var eventHandlerRef: EventHandlerRef?
+    private var isListening = false
     
     private init() {}
     
     /// Starts listening for the global hotkeys
     func startListening() {
-        guard !isActive else { return }
+        guard !isListening else { return }
+        isListening = true
         
         // Register the Carbon hotkeys (no permission prompt)
         registerHotkey()
-        #if !APP_STORE
+        if !isActive { useAvailableShortcut() }
         registerAIHotkey()
-        #endif
         registerPenguinHotkey()
-        
-        isActive = true
         print("HotkeyHandler: Started listening")
     }
     
@@ -52,6 +54,9 @@ class HotkeyHandler: ObservableObject {
         unregisterHotkey()
         unregisterAIHotkey()
         unregisterPenguinHotkey()
+        if let eventHandlerRef { RemoveEventHandler(eventHandlerRef) }
+        eventHandlerRef = nil
+        isListening = false
         isActive = false
         print("HotkeyHandler: Stopped listening")
     }
@@ -63,16 +68,39 @@ class HotkeyHandler: ObservableObject {
         print("HotkeyHandler: Re-registered hotkey")
     }
     
+    /// A second clipboard app may already own the preferred shortcut.
+    /// Persist a working alternative so Settings always shows the real binding.
+    func useAvailableShortcut() {
+        unregisterHotkey()
+        let settings = AppSettings.shared
+        let oldModifiers = settings.hotkeyModifiers
+        let oldCode = settings.hotkeyKeyCode
+        for candidate in [UInt32(cmdKey | optionKey), UInt32(cmdKey | controlKey), UInt32(controlKey | optionKey)] {
+            settings.hotkeyModifiers = candidate
+            settings.hotkeyKeyCode = UInt32(kVK_ANSI_V)
+            registerHotkey()
+            if isActive {
+                registrationMessage = "The previous shortcut was unavailable. Clippy is using the shortcut shown above."
+                return
+            }
+        }
+        settings.hotkeyModifiers = oldModifiers
+        settings.hotkeyKeyCode = oldCode
+        registrationMessage = "Another app is using this shortcut. Choose a different combination."
+    }
+
     /// Unregisters the current clipboard hotkey
     private func unregisterHotkey() {
         if let hotKeyRef = hotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
             self.hotKeyRef = nil
         }
+        isActive = false
     }
     
     /// Unregisters the AI hotkey
     private func unregisterAIHotkey() {
+        aiShortcutAvailable = false
         if let aiHotKeyRef = aiHotKeyRef {
             UnregisterEventHotKey(aiHotKeyRef)
             self.aiHotKeyRef = nil
@@ -81,6 +109,7 @@ class HotkeyHandler: ObservableObject {
     
     /// Unregisters the Penguin hotkey
     private func unregisterPenguinHotkey() {
+        companionShortcutAvailable = false
         if let penguinHotKeyRef = penguinHotKeyRef {
             UnregisterEventHotKey(penguinHotKeyRef)
             self.penguinHotKeyRef = nil
@@ -95,6 +124,10 @@ class HotkeyHandler: ObservableObject {
         }
         
         // Get settings
+        guard eventHandlerRef != nil else {
+            registrationMessage = "Couldn't start keyboard shortcuts. Restart Clippy and try again."
+            return
+        }
         let settings = AppSettings.shared
         let keyCode = settings.hotkeyKeyCode
         let modifiers = settings.hotkeyModifiers
@@ -114,11 +147,9 @@ class HotkeyHandler: ObservableObject {
             &hotKeyRef
         )
         
-        if registerStatus != noErr {
-            print("HotkeyHandler: Failed to register hotkey: \(registerStatus)")
-        } else {
-            print("HotkeyHandler: Successfully registered hotkey (keyCode: \(keyCode), modifiers: \(modifiers))")
-        }
+        isActive = registerStatus == noErr
+        registrationMessage = isActive ? nil : "This shortcut is unavailable. Choose another combination."
+        print("HotkeyHandler: Clipboard shortcut registration status: \(registerStatus)")
     }
     
     /// Registers the AI hotkey (Cmd+Shift+C)
@@ -148,6 +179,7 @@ class HotkeyHandler: ObservableObject {
             &aiHotKeyRef
         )
         
+        aiShortcutAvailable = registerStatus == noErr
         if registerStatus != noErr {
             print("HotkeyHandler: Failed to register AI hotkey: \(registerStatus)")
         } else {
@@ -181,6 +213,7 @@ class HotkeyHandler: ObservableObject {
             &penguinHotKeyRef
         )
         
+        companionShortcutAvailable = registerStatus == noErr
         if registerStatus != noErr {
             print("HotkeyHandler: Failed to register Penguin hotkey: \(registerStatus)")
         } else {
