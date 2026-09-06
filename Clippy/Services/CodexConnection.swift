@@ -6,7 +6,10 @@ import Foundation
 @MainActor
 final class CodexConnection: ObservableObject {
     static let shared = CodexConnection()
-    @Published var isConnected = false
+    @Published var isConnected = false {
+        didSet { if !isConnected { connectedEmail = nil } }
+    }
+    @Published private(set) var connectedEmail: String?
     @Published var isConnecting = false
     @Published var status = "Connect your ChatGPT account to use its Codex allowance."
     @Published var userCode: String?
@@ -85,12 +88,19 @@ final class CodexConnection: ObservableObject {
         }
     }
 
+    /// Display metadata comes from account/read, never from tokens or disk.
+    private func updateAccount(_ account: [String: Any]?) {
+        isConnected = account?["type"] as? String == "chatgpt"
+        let email = (account?["email"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        connectedEmail = isConnected && email?.isEmpty == false ? email : nil
+    }
+
     func refreshAccount() async {
         do {
             try await start()
             let result = try await rpc("account/read", ["refreshToken": false])
             let account = result["account"] as? [String: Any]
-            isConnected = account?["type"] as? String == "chatgpt"
+            updateAccount(account)
             status = isConnected ? "ChatGPT connected. Your Codex plan limits apply." : "Connect your ChatGPT account to use its Codex allowance."
             if isConnected { await AIModelCatalog.shared.refresh() }
         } catch {
@@ -131,7 +141,8 @@ final class CodexConnection: ObservableObject {
     func availableModels() async throws -> [AIModelOption] {
         try await start()
         let account = try await rpc("account/read", ["refreshToken": false])["account"] as? [String: Any]
-        guard account?["type"] as? String == "chatgpt" else {
+        updateAccount(account)
+        guard isConnected else {
             throw TextAIError.message("Connect ChatGPT to discover your models.")
         }
         isConnected = true
@@ -170,7 +181,8 @@ final class CodexConnection: ObservableObject {
         try await start()
         try Task.checkCancellation()
         let account = try await rpc("account/read", ["refreshToken": false])["account"] as? [String: Any]
-        guard account?["type"] as? String == "chatgpt" else {
+        updateAccount(account)
+        guard isConnected else {
             isConnected = false
             throw TextAIError.message("Connect your ChatGPT account in Settings first.")
         }
@@ -404,6 +416,7 @@ final class CodexConnection: ObservableObject {
             userCode = nil
             verificationURL = nil
             loginTimeout?.cancel()
+            connectedEmail = nil
             isConnected = params["success"] as? Bool == true
             status = isConnected ? "ChatGPT connected. Your Codex plan limits apply." : "Sign-in wasn't completed. Try again."
             AIModelCatalog.shared.invalidate()

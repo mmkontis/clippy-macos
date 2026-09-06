@@ -232,6 +232,11 @@ struct SettingsView: View {
                 Text("Uses your OpenAI API billing, separately from ChatGPT. Your key stays in Keychain.")
                     .font(.caption).foregroundStyle(.secondary)
             } else if textAIProvider == AIProvider.chatGPT.rawValue {
+                if codexConnection.isConnected, let email = codexConnection.connectedEmail {
+                    Text("Connected as \(email)")
+                        .font(.callout).fontWeight(.medium)
+                        .textSelection(.enabled)
+                }
                 Text(codexConnection.status).font(.callout)
                 if codexConnection.isConnecting, let url = codexConnection.verificationURL {
                     Link("Continue sign-in", destination: url)
