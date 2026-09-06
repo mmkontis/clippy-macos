@@ -344,7 +344,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if event.type == .scrollWheel {
                 if let media = self.mediaBarWindow, event.window === media,
                    abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
-                    self.mediaDismissScroll += abs(event.scrollingDeltaY)
+                    guard event.momentumPhase.isEmpty else { return nil }
+                    if event.phase.contains(.began) { self.mediaDismissScroll = 0 }
+                    // Wheel deltas are lines, while trackpad deltas are points.
+                    self.mediaDismissScroll += abs(event.scrollingDeltaY) * (event.hasPreciseScrollingDeltas ? 1 : 20)
                     if self.mediaDismissScroll >= 20 { self.hideMediaBar() }
                     return nil
                 }
