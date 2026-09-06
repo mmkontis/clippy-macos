@@ -32,6 +32,6 @@ Before publication, test browser sign-in, cancel, reconnect, logout, API success
 
 ## Desktop controls
 
-Click the menu bar icon for Clipboard, Text AI, Settings, Updates, About and Get Coworker. Settings uses one continuous scroll in a resizable window with a transparent title bar. Sidebar anchors jump to Clipboard, Shortcuts, Text AI, Companion and About, and follow manual scrolling. General preferences are grouped under Clipboard. Store updates open the App Store; direct updates use Sparkle.
+Click the menu bar icon for Clipboard, Text AI, Settings, Updates, About and Get Coworker. Settings uses one continuous scroll in a resizable window with a transparent title bar. Sidebar anchors jump to Clipboard, Shortcuts, Text AI, Companion and About, and follow manual scrolling. General preferences are grouped under Clipboard. Store updates open the App Store; direct updates use Sparkle. About identifies the installed edition, and Store controls explicitly say “Check App Store for Updates”. Both editions are open source. Use the `Clippy` scheme for GitHub previews and `ClippyStore` only when checking Store behavior; `--preview-text-ai` retains the selected scheme’s updater.
 
 The default clipboard shortcut is Command-Shift-V. When another app already owns it, Clippy chooses an available alternative and shows the actual binding in Shortcuts settings. Recording a new shortcut pauses existing bindings; Escape cancels. Key code zero is a valid A key and is preserved across launches.

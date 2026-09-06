@@ -42,6 +42,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     #endif
 
+    static var updateActionTitle: String {
+        #if APP_STORE
+        "Check App Store for Updates…"
+        #else
+        "Check for Updates…"
+        #endif
+    }
+
+    static var distributionDescription: String {
+        #if APP_STORE
+        "App Store edition. Updates through the Mac App Store."
+        #else
+        "GitHub edition. Updates through Sparkle."
+        #endif
+    }
+
     /// The application that was active before showing the panel
     static var previousActiveApp: NSRunningApplication?
     
@@ -59,6 +75,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ClipboardKitConfig.storageFolderName = "ClippyTextAIPreview"
             #if APP_STORE
             ClipboardKitConfig.allowsSimulatedKeystrokes = false
+            #endif
+            #if !APP_STORE
+            _ = updaterController
             #endif
             setupStatusItem()
             setupHotkey()
@@ -163,7 +182,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = item("Ask Clippy…", #selector(openTextAI), symbol: "sparkles")
         menu.addItem(.separator())
         _ = item("Settings…", #selector(openSettings), key: ",", symbol: "gearshape")
-        _ = item("Check for Updates…", #selector(checkForUpdates), symbol: "arrow.down.circle")
+        _ = item(Self.updateActionTitle, #selector(checkForUpdates), symbol: "arrow.down.circle")
         _ = item("About Clippy", #selector(openAbout), symbol: "info.circle")
         menu.addItem(.separator())
         let coworker = item("Get Coworker", #selector(openDictationMode))

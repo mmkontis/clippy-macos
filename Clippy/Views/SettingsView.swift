@@ -645,12 +645,14 @@ struct SettingsView: View {
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
             
+            Text(AppDelegate.distributionDescription)
+                .font(.caption).foregroundStyle(.secondary)
             Button {
                 AppDelegate.shared?.checkForUpdates()
             } label: {
                 HStack {
                     Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Check for Updates...")
+                    Text(AppDelegate.updateActionTitle)
                 }
             }
             .buttonStyle(.bordered)
