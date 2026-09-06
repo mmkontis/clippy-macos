@@ -30,6 +30,6 @@ Before publication, test browser sign-in, cancel, reconnect, logout, API success
 
 ## Desktop controls
 
-Click the menu bar icon for Clipboard, Text AI, Settings, Updates, About and Get Coworker. Settings uses a resizable sidebar window. Store updates open the App Store; direct updates use Sparkle.
+Click the menu bar icon for Clipboard, Text AI, Settings, Updates, About and Get Coworker. Settings uses one continuous scroll in a resizable window with a transparent title bar. Sidebar anchors jump to Clipboard, Shortcuts, Text AI, Companion and About, and follow manual scrolling. General preferences are grouped under Clipboard. Store updates open the App Store; direct updates use Sparkle.
 
-The default clipboard shortcut is Command-Shift-V. When another app already owns it, Clippy chooses an available alternative and shows the actual binding in General settings. Recording a new shortcut pauses existing bindings; Escape cancels. Key code zero is a valid A key and is preserved across launches.
+The default clipboard shortcut is Command-Shift-V. When another app already owns it, Clippy chooses an available alternative and shows the actual binding in Shortcuts settings. Recording a new shortcut pauses existing bindings; Escape cancels. Key code zero is a valid A key and is preserved across launches.

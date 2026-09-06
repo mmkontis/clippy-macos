@@ -9,8 +9,6 @@ import Sparkle
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @State private var isRecordingHotkey = false
-    @State private var recordedModifiers: NSEvent.ModifierFlags = []
-    @State private var recordedKeyCode: UInt16 = 0
     
     @State private var hasAccessibilityPermission = false
     @State private var showResetConfirmation = false
@@ -29,23 +27,50 @@ struct SettingsView: View {
             Divider()
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(navigation.page.title).font(.system(size: 30, weight: .bold))
-                    Text(navigation.page.subtitle).foregroundStyle(.secondary)
+                    Text("Settings").font(.system(size: 30, weight: .bold))
+                    Text("Make Clippy yours.").foregroundStyle(.secondary)
                 }
-                .padding(32)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        pageContent
+                .padding(.horizontal, 32).padding(.top, 44).padding(.bottom, 24)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 36) {
+                            ForEach(SettingsPage.allCases) { section in
+                                VStack(alignment: .leading, spacing: 16) {
+                                    Text(section.title).font(.system(size: 20, weight: .semibold))
+                                    sectionContent(section)
+                                }
+                                .id(section)
+                                .background(GeometryReader { geometry in
+                                    Color.clear.preference(key: SettingsSectionPositions.self,
+                                        value: [section: geometry.frame(in: .named("settingsScroll")).minY])
+                                })
+                            }
+                        }
+                        .frame(maxWidth: 680, alignment: .leading)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 80)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: 680, alignment: .leading)
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 32)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .coordinateSpace(name: "settingsScroll")
+                    .onPreferenceChange(SettingsSectionPositions.self) { positions in
+                        let passed = positions.filter { $0.value <= 48 }
+                        if let current = passed.max(by: { $0.value < $1.value })?.key {
+                            navigation.page = current
+                            if current != .shortcuts { isRecordingHotkey = false }
+                        }
+                    }
+                    .onChange(of: navigation.scrollRequest) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(navigation.requestedPage, anchor: .top)
+                        }
+                    }
+                    .onAppear { proxy.scrollTo(navigation.requestedPage, anchor: .top) }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 800, minHeight: 580)
         .tint(CoworkerBrand.blue)
         .onAppear { checkPermissions() }
@@ -68,7 +93,7 @@ struct SettingsView: View {
             .padding(.horizontal, 8)
             VStack(spacing: 4) {
                 ForEach(SettingsPage.allCases) { page in
-                    Button { navigation.page = page } label: {
+                    Button { navigation.scroll(to: page) } label: {
                         Label(page.title, systemImage: page.symbol)
                             .font(.system(size: 13, weight: navigation.page == page ? .semibold : .regular))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,23 +120,17 @@ struct SettingsView: View {
             }.buttonStyle(.plain)
             Text("Free. Open source. Yours.").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 10)
         }
-        .padding(.horizontal, 12).padding(.vertical, 24)
+        .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 24)
         .frame(width: 204)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    @ViewBuilder private var pageContent: some View {
-        switch navigation.page {
-        case .general:
-            card {
-                settingsToggle("Launch at login", detail: "Keep Clippy ready when your Mac starts.", value: $settings.launchAtLogin)
-            }
-            card { hotkeySection }
-            #if !APP_STORE
-            card { permissionsSection }
-            #endif
+    @ViewBuilder private func sectionContent(_ section: SettingsPage) -> some View {
+        switch section {
         case .clipboard:
             card {
+                settingsToggle("Launch at login", detail: "Keep Clippy ready when your Mac starts.", value: $settings.launchAtLogin)
+                Divider()
                 if ClipboardKitConfig.allowsSimulatedKeystrokes {
                     settingsToggle("Paste on select", detail: "Insert a selected clip into the previous app.", value: $settings.autoPaste)
                     Divider()
@@ -125,6 +144,11 @@ struct SettingsView: View {
                 settingsToggle("Dismiss recent tiles after paste", detail: "Clips remain in your history.", value: $settings.dismissRecentOnPaste)
             }
             card { historySection }
+            #if !APP_STORE
+            card { permissionsSection }
+            #endif
+        case .shortcuts:
+            card { hotkeySection }
         case .textAI:
             card { cloudAISection }
         case .companion:
@@ -203,8 +227,18 @@ struct SettingsView: View {
                     } else if codexConnection.isConnected {
                         Button("Disconnect") { Task { await codexConnection.disconnectAccount() } }
                     } else {
-                        Button("Connect ChatGPT") { Task { await codexConnection.connect() } }
-                            .buttonStyle(.borderedProminent)
+                        Button { Task { await codexConnection.connect() } } label: {
+                            HStack(spacing: 9) {
+                                Image("ChatGPTLogo").resizable().scaledToFit().frame(width: 20, height: 20)
+                                Text("Connect ChatGPT").font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 9))
+                            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.1)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Connect ChatGPT")
                     }
                     Button("Check connection") { Task { await codexConnection.refreshAccount() } }
                         .disabled(codexConnection.isConnecting)
@@ -418,7 +452,7 @@ struct SettingsView: View {
 
     private var hotkeySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Keyboard Shortcut", systemImage: "keyboard")
+            Text("Open from anywhere")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.primary)
             
@@ -447,7 +481,18 @@ struct SettingsView: View {
                     Button("Use an available shortcut") { hotkeys.useAvailableShortcut() }
                 }
             }
-            Text("Click the shortcut to change it. No permission is needed.")
+            Divider()
+            HStack {
+                Text("Open text AI")
+                Spacer()
+                Text(hotkeys.aiShortcutAvailable ? "⌘⇧C" : "Unavailable").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("Show or hide companion")
+                Spacer()
+                Text(hotkeys.companionShortcutAvailable ? "⌘⇧P" : "Unavailable").font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            Text("Click the clipboard shortcut to change it. No permission is needed.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
@@ -626,6 +671,9 @@ struct HotkeyRecorderView: View {
         }
         .buttonStyle(.plain)
         .onDisappear { stopRecording(); isRecording = false }
+        .onChange(of: isRecording) { _, recording in
+            if !recording { stopRecording() }
+        }
     }
     
     private var hotkeyDisplayString: String {
@@ -716,11 +764,11 @@ struct HotkeyRecorderView: View {
 // MARK: - Settings Window Controller
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, clipboard, textAI, companion, about
+    case clipboard, shortcuts, textAI, companion, about
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .general: return "General"
+        case .shortcuts: return "Shortcuts"
         case .clipboard: return "Clipboard"
         case .textAI: return "Text AI"
         case .companion: return "Companion"
@@ -729,7 +777,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
     var subtitle: String {
         switch self {
-        case .general: return "Make Clippy feel at home on your Mac."
+        case .shortcuts: return "A quicker way to get there."
         case .clipboard: return "A little less searching. A little more doing."
         case .textAI: return "Write, rewrite and summarize. Always optional."
         case .companion: return "A little personality for your desktop."
@@ -738,7 +786,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
     var symbol: String {
         switch self {
-        case .general: return "slider.horizontal.3"
+        case .shortcuts: return "keyboard"
         case .clipboard: return "clipboard"
         case .textAI: return "sparkles"
         case .companion: return "bird"
@@ -749,7 +797,22 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
 @MainActor final class SettingsNavigation: ObservableObject {
     static let shared = SettingsNavigation()
-    @Published var page: SettingsPage = .general
+    @Published var page: SettingsPage = .clipboard
+    @Published private(set) var scrollRequest = UUID()
+    private(set) var requestedPage: SettingsPage = .clipboard
+
+    func scroll(to page: SettingsPage) {
+        requestedPage = page
+        self.page = page
+        scrollRequest = UUID()
+    }
+}
+
+private struct SettingsSectionPositions: PreferenceKey {
+    static let defaultValue: [SettingsPage: CGFloat] = [:]
+    static func reduce(value: inout [SettingsPage: CGFloat], nextValue: () -> [SettingsPage: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
 }
 
 @MainActor final class SettingsWindowController {
@@ -757,15 +820,19 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     private var window: NSWindow?
 
     func showSettings(page: SettingsPage? = nil) {
-        if let page { SettingsNavigation.shared.page = page }
+        if let page { SettingsNavigation.shared.scroll(to: page) }
         if window == nil {
             let newWindow = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 940, height: 680),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false
             )
             newWindow.contentViewController = NSHostingController(rootView: SettingsView())
             newWindow.title = "Clippy Settings"
+            newWindow.titleVisibility = .hidden
+            newWindow.titlebarAppearsTransparent = true
+            newWindow.titlebarSeparatorStyle = .none
+            newWindow.isMovableByWindowBackground = true
             newWindow.minSize = NSSize(width: 800, height: 580)
             newWindow.setFrameAutosaveName("ClippyDesktopSettings")
             newWindow.center()

@@ -18,6 +18,8 @@ class HotkeyHandler: ObservableObject {
     /// Whether the handler is active
     @Published private(set) var isActive = false
     @Published private(set) var registrationMessage: String?
+    @Published private(set) var aiShortcutAvailable = false
+    @Published private(set) var companionShortcutAvailable = false
     
     /// Reference to the registered clipboard hotkey
     private var hotKeyRef: EventHotKeyRef?
@@ -98,6 +100,7 @@ class HotkeyHandler: ObservableObject {
     
     /// Unregisters the AI hotkey
     private func unregisterAIHotkey() {
+        aiShortcutAvailable = false
         if let aiHotKeyRef = aiHotKeyRef {
             UnregisterEventHotKey(aiHotKeyRef)
             self.aiHotKeyRef = nil
@@ -106,6 +109,7 @@ class HotkeyHandler: ObservableObject {
     
     /// Unregisters the Penguin hotkey
     private func unregisterPenguinHotkey() {
+        companionShortcutAvailable = false
         if let penguinHotKeyRef = penguinHotKeyRef {
             UnregisterEventHotKey(penguinHotKeyRef)
             self.penguinHotKeyRef = nil
@@ -175,6 +179,7 @@ class HotkeyHandler: ObservableObject {
             &aiHotKeyRef
         )
         
+        aiShortcutAvailable = registerStatus == noErr
         if registerStatus != noErr {
             print("HotkeyHandler: Failed to register AI hotkey: \(registerStatus)")
         } else {
@@ -208,6 +213,7 @@ class HotkeyHandler: ObservableObject {
             &penguinHotKeyRef
         )
         
+        companionShortcutAvailable = registerStatus == noErr
         if registerStatus != noErr {
             print("HotkeyHandler: Failed to register Penguin hotkey: \(registerStatus)")
         } else {
