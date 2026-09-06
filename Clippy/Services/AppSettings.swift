@@ -62,7 +62,7 @@ class AppSettings: ObservableObject {
     func configureLaunchAtLogin() {
         #if DEBUG
         // Listing and UI previews must never install a temporary build as a login item.
-        if CommandLine.arguments.contains("--preview-text-ai") || CommandLine.arguments.contains("--capture-listing") { return }
+        if CommandLine.arguments.contains("--preview-text-ai") || CommandLine.arguments.contains("--capture-listing") || CommandLine.arguments.contains("--no-login-item") { return }
         #endif
         launchAtLoginMessage = nil
         do {

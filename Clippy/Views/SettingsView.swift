@@ -32,17 +32,19 @@ struct SettingsView: View {
             sidebar
             Divider()
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Settings").font(.system(size: 30, weight: .bold))
-                    Text("Make Clippy yours.").foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 32).padding(.top, 44).padding(.bottom, 24)
                 GeometryReader { viewport in
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 36) {
                             ForEach(SettingsPage.allCases) { section in
                                 VStack(alignment: .leading, spacing: 16) {
+                                    if section == .clipboard {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text("Settings").font(.system(size: 30, weight: .bold))
+                                            Text("Make Clippy yours.").foregroundStyle(.secondary)
+                                        }
+                                        .padding(.bottom, 8)
+                                    }
                                     Text(section.title).font(.system(size: 20, weight: .semibold))
                                     sectionContent(section)
                                 }
@@ -59,6 +61,7 @@ struct SettingsView: View {
                         .padding(.bottom, 80)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .padding(.top, 36)
                     .coordinateSpace(name: "settingsScroll")
                     .onPreferenceChange(SettingsSectionPositions.self) { positions in
                         let passed = positions.filter { $0.value <= 48 }
