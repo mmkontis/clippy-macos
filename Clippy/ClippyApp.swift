@@ -81,7 +81,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             #endif
             setupStatusItem()
             setupHotkey()
-            SettingsWindowController.shared.showSettings()
+            if CommandLine.arguments.contains("--preview-onboarding") {
+                OnboardingWindowController.shared.showOnboarding()
+            } else {
+                SettingsWindowController.shared.showSettings()
+            }
             return
         }
         if let index = CommandLine.arguments.firstIndex(of: "--capture-listing"), CommandLine.arguments.count > index + 1 {

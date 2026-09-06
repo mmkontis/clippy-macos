@@ -765,6 +765,10 @@ struct HotkeyRecorderView: View {
     }
     
     private var hotkeyDisplayString: String {
+        Self.displayString(modifiers: modifiers, keyCode: keyCode)
+    }
+
+    static func displayString(modifiers: UInt32, keyCode: UInt32) -> String {
         var parts: [String] = []
         
         if modifiers & UInt32(cmdKey) != 0 {
@@ -787,7 +791,7 @@ struct HotkeyRecorderView: View {
         return parts.isEmpty ? "Click to set" : parts.joined()
     }
     
-    private func keyCodeToString(_ keyCode: UInt32) -> String? {
+    private static func keyCodeToString(_ keyCode: UInt32) -> String? {
         let keyMap: [UInt32: String] = [
             0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
             8: "C", 9: "V", 10: "§", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",
