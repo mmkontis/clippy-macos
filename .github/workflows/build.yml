@@ -7,7 +7,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Test clipboard privacy and streaming
+      - name: Prepare verified ChatGPT component
+        run: python3 scripts/fetch-codex.py
+      - name: Test clipboard privacy and text AI
         run: bash scripts/test.sh
       - name: Build Apple Silicon and Intel
         run: >-
@@ -23,3 +25,7 @@ jobs:
           'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
       - name: Verify Store updater exclusion
         run: test ! -d build-store/Build/Products/Release/Clippy.app/Contents/Frameworks/Sparkle.framework
+      - name: Verify bundled ChatGPT architectures
+        run: |
+          lipo build/Build/Products/Release/Clippy.app/Contents/Helpers/codex -verify_arch arm64 x86_64
+          lipo build-store/Build/Products/Release/Clippy.app/Contents/Helpers/codex -verify_arch arm64 x86_64

@@ -4,9 +4,20 @@ Direct-download builds store clipboard history and images locally in `~/Library/
 
 No Clippy account is required. Updated Clippy and Coworker builds share this local history automatically. Copies and deletions appear in both apps. Nothing is synchronized across devices. Earlier history files are imported once and retained in their original folders as recovery copies; clearing the shared history does not erase those old recovery files. Content marked as concealed or transient by the copying app is excluded; ordinary copied secrets can still enter history.
 
-AI paste is optional and off by default. When enabled, the prompt you explicitly submit and a random persistent installation ID are sent to Humanlike's online AI endpoint. The endpoint uses the ID for service limits and may process requests through an AI provider. Do not enable this option for material you do not want processed online.
+## Text AI in version 1.3
 
-Voice is optional. A voice conversation sends microphone audio to Google's Gemini API using your own key. The key is kept in macOS Keychain. Clippy does not write voice responses, transcripts, or session tokens to its debug log. Google applies its own terms and data handling policies.
+Text AI is off until you choose a provider. Clippy sends only the prompt you explicitly submit to OpenAI. It does not attach clipboard history, files, microphone audio, or a device ID. Answers appear in Clippy; copying them is an explicit action.
+
+The API-key option uses OpenAI's Responses API with storage disabled. The key stays in macOS Keychain, and usage is billed to your OpenAI API account. OpenAI's provider-side retention and policies still apply.
+
+The ChatGPT option uses the bundled, Apache-licensed Codex runtime and your ChatGPT account's Codex allowance. Codex manages sign-in in a Clippy-specific Keychain credential store. Clippy does not read OAuth tokens or your other Codex account. It uses temporary conversations and disables tools and local environment access. Model requests include the submitted text and the standard context needed by the Codex service. OpenAI's ChatGPT/Codex terms, plan limits, and data controls apply.
+
+Clippy does not keep a transcript log. The current prompt and answer remain in memory until cleared or the app exits. Disconnect ChatGPT or remove the API key in Settings to remove the respective saved credentials. No microphone permission or voice service is included in version 1.3.
+
+## Earlier downloads
+
+Version 1.2.0, still the public download until 1.3 is released, includes optional Humanlike AI paste (submitted prompt and random installation ID) and optional Gemini voice (microphone audio with the user's Gemini key). Those features are removed in the 1.3 source.
+
 
 Sparkle can contact the update server to check for releases. The server can receive normal connection metadata such as IP address. Automatic installation is off by default. Users can control update checks through Sparkle.
 

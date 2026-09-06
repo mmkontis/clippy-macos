@@ -20,6 +20,7 @@ struct ClippyApp: App {
 
 // MARK: - App Delegate
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shared instance for access from SwiftUI views
     static var shared: AppDelegate?
@@ -52,6 +53,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if CommandLine.arguments.contains("--preview-text-ai") {
+            AppDelegate.shared = self
+            ClipboardKitConfig.storageFolderName = "ClippyTextAIPreview"
+            #if APP_STORE
+            ClipboardKitConfig.allowsSimulatedKeystrokes = false
+            #endif
+            setupStatusItem()
+            SettingsWindowController.shared.showSettings()
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--capture-listing"), CommandLine.arguments.count > index + 1 {
             captureListing(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
             return
@@ -113,6 +124,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationWillTerminate(_ notification: Notification) {
+        AIChatService.shared.cancel()
+        CodexConnection.shared.cancelLogin()
+        CodexConnection.shared.stop()
         // Check if we should clear history on quit
         if AppSettings.shared.clearHistoryOnQuit {
             clipboardManager.clearHistory()
@@ -151,6 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         
         menu.addItem(NSMenuItem(title: "Show Clipboard History", action: #selector(showPanel), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Ask Clippy...", action: #selector(openTextAI), keyEquivalent: ""))
 
         let dictationItem = NSMenuItem(title: "Get Coworker Dictation", action: #selector(openDictationMode), keyEquivalent: "")
         dictationItem.target = self
@@ -415,7 +430,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 panel.animator().alphaValue = 0
             }, completionHandler: {
                 panel.close()
-                self.panelWindow = nil
+                Task { @MainActor in self.panelWindow = nil }
             })
         }
         
@@ -510,6 +525,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    @objc private func openTextAI() { showAIPanelNearCursor() }
+
     @objc private func openPenguinCreator() {
         PenguinCreatorWindowController.shared.showCreator()
     }
@@ -526,6 +543,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func quitApp() {
+        AIChatService.shared.cancel()
+        CodexConnection.shared.stop()
         NSApp.terminate(nil)
     }
     
@@ -576,9 +595,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @MainActor
     private func showAIPanelWindow(nearCursor: Bool = false) {
-        #if APP_STORE
-        return // Streaming keystroke insertion belongs to the direct-download edition.
-        #endif
         // Store the currently active application before we take focus
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -601,7 +617,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 set: { if !$0 { self.hideAIPanel() } }
             ),
             onSubmit: { [weak self] prompt in
-                // Activate previous app and start streaming, but keep panel open for spinner
+                // Keep the submitted answer in Clippy for explicit copying.
                 self?.submitAIPromptKeepPanel(prompt)
             },
             onHide: { [weak self] in
@@ -617,9 +633,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create a hosting controller
         let hostingController = NSHostingController(rootView: aiPanelView)
         
-        // Create a borderless panel window - smaller for just input
+        // Keep the prompt and answer together in a floating panel.
         let panel = FloatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 48),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 380),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -649,8 +665,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func positionAIPanel(_ panel: NSWindow, nearCursor: Bool = false) {
-        let panelWidth: CGFloat = 400
-        let panelHeight: CGFloat = 48
+        let panelWidth: CGFloat = 520
+        let panelHeight: CGFloat = 380
         
         let mouseLocation = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouseLocation, $0.frame, false) } ?? NSScreen.main
@@ -669,57 +685,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
     
-    /// Hides panels, activates previous app, and starts streaming the AI response
+    @MainActor
     func submitAIPromptAndStream(_ prompt: String) {
-        let previousApp = AppDelegate.previousActiveApp
-        
-        // Hide both panels (whichever is open)
-        hideAIPanel()
-        hidePanel()
-        
-        // Activate the previous app
-        if let app = previousApp {
-            app.activate()
-        }
-        
-        // Wait longer for app to fully activate and focus input before streaming
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            AIChatService.shared.sendMessageAndStream(prompt) {
-                print("AI streaming complete")
-            }
-        }
-    }
-    
-    /// Shows the AI panel and immediately submits a prompt (used from clipboard panel sparkle button)
-    func showAIPanelAndSubmit(_ prompt: String) {
-        AIChatService.shared.prepareForStreaming()
-        
-        Task { @MainActor in
-            showAIPanelWindow(nearCursor: true)
-            submitAIPromptKeepPanel(prompt)
-        }
+        showAIPanelAndSubmit(prompt)
     }
 
-    /// Activates previous app and starts streaming, but keeps AI panel open for spinner
-    func submitAIPromptKeepPanel(_ prompt: String) {
-        let previousApp = AppDelegate.previousActiveApp
-        
-        // Show spinner immediately before any delay
-        AIChatService.shared.prepareForStreaming()
-        
-        // Activate the previous app (but keep AI panel visible)
-        if let app = previousApp {
-            app.activate()
-        }
-        
-        // Wait for app to fully activate and focus input before streaming
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            AIChatService.shared.sendMessageAndStream(prompt) {
-                print("AI streaming complete")
-            }
-        }
+    @MainActor
+    func showAIPanelAndSubmit(_ prompt: String) {
+        showAIPanelWindow(nearCursor: true)
+        submitAIPromptKeepPanel(prompt)
     }
-    
+
+    @MainActor
+    func submitAIPromptKeepPanel(_ prompt: String) {
+        AIChatService.shared.sendMessageAndStream(prompt) {}
+    }
+
     func hideAIPanel() {
         if let monitor = aiEventMonitor {
             NSEvent.removeMonitor(monitor)

@@ -13,6 +13,7 @@ security find-identity -v -p codesigning | /usr/bin/grep -Fq "$CLIPPY_SIGNING_ID
     echo "The requested signing identity and private key are not available." >&2; exit 1;
 }
 xcrun notarytool history --keychain-profile "$CLIPPY_NOTARY_PROFILE" >/dev/null
+python3 scripts/fetch-codex.py
 CLIPPY_RELEASE_WORK=$(mktemp -d "${TMPDIR:-/tmp}/clippy-release.XXXXXX")
 trap 'rm -rf "$CLIPPY_RELEASE_WORK"' EXIT
 xcodebuild -project Clippy.xcodeproj -scheme Clippy -configuration Release \

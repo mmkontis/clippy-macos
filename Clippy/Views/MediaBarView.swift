@@ -93,7 +93,7 @@ struct MediaBarView: View {
         
         if let callback = onPasteItem {
             callback(item)
-        } else if let appDelegate = NSApp.delegate as? AppDelegate {
+        } else if let appDelegate = AppDelegate.shared {
             appDelegate.pasteAndHide()
         }
     }

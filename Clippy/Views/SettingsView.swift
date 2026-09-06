@@ -14,11 +14,12 @@ struct SettingsView: View {
     @State private var recordedKeyCode: UInt16 = 0
     
     @State private var hasAccessibilityPermission = false
-    @State private var hasMicrophonePermission = false
     @State private var showResetConfirmation = false
-    @State private var voiceAPIKey = ""
-    @State private var voiceKeyStatus = ""
-    @AppStorage("cloudAIEnabled") private var cloudAIEnabled = false
+    @State private var openAIKey = ""
+    @State private var keyStatus = ""
+    @AppStorage("textAIProvider") private var textAIProvider = AIProvider.none.rawValue
+    @AppStorage("openAITextModel") private var openAITextModel = "gpt-5.4-mini"
+    @ObservedObject private var codexConnection = CodexConnection.shared
     
     var body: some View {
         VStack(spacing: 0) {
@@ -146,7 +147,9 @@ struct SettingsView: View {
                     Divider()
                     
                     // Permissions section
+                    #if !APP_STORE
                     permissionsSection
+                    #endif
                     
                     Divider()
                     
@@ -208,32 +211,69 @@ struct SettingsView: View {
     
     private var cloudAISection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Optional online AI", systemImage: "sparkles")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.blue)
-            #if !APP_STORE
-            Toggle("Enable AI paste", isOn: $cloudAIEnabled)
-            Text("AI paste sends the prompt you submit and a random installation ID to Humanlike's online service. Service limits apply. Clipboard history works free and offline without it.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            #endif
-            SecureField("Your Gemini API key (optional)", text: $voiceAPIKey)
-                .textFieldStyle(.roundedBorder)
-            HStack {
-                Button("Save voice key") {
-                    voiceKeyStatus = VoiceCredentials.save(voiceAPIKey) ? "Saved in Keychain." : "Could not save in Keychain. Try again."
-                    voiceAPIKey = ""
-                }
-                .disabled(voiceAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Remove voice key") {
-                    voiceKeyStatus = VoiceCredentials.save("") ? "Voice key removed." : "Could not remove the key."
-                    voiceAPIKey = ""
+            Label("Optional text AI", systemImage: "sparkles").font(.headline)
+            Picker("Use AI with", selection: $textAIProvider) {
+                ForEach(AIProvider.allCases) { provider in
+                    Text(provider.title).tag(provider.rawValue)
                 }
             }
-            Text("Voice sends microphone audio to Google only when you start a conversation. Your API provider may charge for usage. The key stays in your Mac's Keychain.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            if !voiceKeyStatus.isEmpty { Text(voiceKeyStatus).font(.caption) }
+            .onChange(of: textAIProvider) { _, value in
+                AIChatService.shared.clear()
+                codexConnection.cancelLogin()
+                if value == AIProvider.chatGPT.rawValue {
+                    Task { await codexConnection.refreshAccount() }
+                } else {
+                    codexConnection.stop()
+                }
+            }
+            if textAIProvider == AIProvider.openAI.rawValue {
+                SecureField("OpenAI API key", text: $openAIKey)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Save key") {
+                        keyStatus = OpenAICredentials.save(openAIKey) ? "Saved in Keychain." : "Couldn't save the key."
+                        openAIKey = ""
+                    }.disabled(openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Remove key") {
+                        AIChatService.shared.clear()
+                        keyStatus = OpenAICredentials.save("") ? "Key removed." : "Couldn't remove the key."
+                        openAIKey = ""
+                    }
+                }
+                if !keyStatus.isEmpty { Text(keyStatus).font(.caption) }
+                DisclosureGroup("Model") {
+                    TextField("OpenAI model", text: $openAITextModel).textFieldStyle(.roundedBorder)
+                }
+                Text("Uses your OpenAI API billing, separately from ChatGPT. Your key stays in Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if textAIProvider == AIProvider.chatGPT.rawValue {
+                Text(codexConnection.status).font(.callout)
+                if codexConnection.isConnecting, let url = codexConnection.verificationURL {
+                    Link("Continue sign-in", destination: url)
+                }
+                HStack {
+                    if codexConnection.isConnecting {
+                        ProgressView().controlSize(.small)
+                        Button("Cancel sign-in") { codexConnection.cancelLogin() }
+                    } else if codexConnection.isConnected {
+                        Button("Disconnect") { Task { await codexConnection.disconnectAccount() } }
+                    } else {
+                        Button("Connect ChatGPT") { Task { await codexConnection.connect() } }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Button("Check connection") { Task { await codexConnection.refreshAccount() } }
+                        .disabled(codexConnection.isConnecting)
+                }
+                Text("Uses Codex through your ChatGPT account. Your plan limits apply. Clippy has a separate sign-in.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Only the text you send is shared with OpenAI. No voice recording. Clipboard history stays on your Mac and works without AI.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Open text AI") { AppDelegate.shared?.showAIPanelNearCursor() }
+                .disabled(textAIProvider == AIProvider.none.rawValue)
+        }
+        .task {
+            if textAIProvider == AIProvider.chatGPT.rawValue { await codexConnection.refreshAccount() }
         }
     }
 
@@ -287,40 +327,6 @@ struct SettingsView: View {
                 )
                 
                 #endif
-                // Microphone Permission
-                HStack {
-                    Image(systemName: hasMicrophonePermission ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(hasMicrophonePermission ? .green : .red)
-                        .font(.system(size: 18))
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Microphone")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Required for AI penguin voice chat")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    if !hasMicrophonePermission {
-                        Button("Grant Access") {
-                            requestMicrophonePermission()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                        .controlSize(.small)
-                    } else {
-                        Text("Granted")
-                            .font(.system(size: 12))
-                            .foregroundColor(.green)
-                    }
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
             }
             
             HStack {
@@ -344,8 +350,6 @@ struct SettingsView: View {
         let trusted = AXIsProcessTrusted()
         hasAccessibilityPermission = trusted
         
-        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        hasMicrophonePermission = (micStatus == .authorized)
     }
     
     private func requestAccessibilityPermission() {
@@ -358,22 +362,8 @@ struct SettingsView: View {
         }
     }
     
-    private func requestMicrophonePermission() {
-        NSApp.activate(ignoringOtherApps: true)
-        AVCaptureDevice.requestAccess(for: .audio) { granted in
-            DispatchQueue.main.async {
-                hasMicrophonePermission = granted
-                if !granted {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            }
-        }
-    }
-    
     private func openPrivacySettings() {
-        if let url = URL(string: ClipboardKitConfig.allowsSimulatedKeystrokes ? "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" : "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -560,7 +550,7 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
             
-            Text("Smart clipboard manager for macOS with AI paste and penguin assistant")
+            Text("Your clipboard, with a memory. Optional text AI and a penguin companion.")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
             
@@ -799,4 +789,3 @@ class SettingsWindowController {
 #Preview {
     SettingsView()
 }
-

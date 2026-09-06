@@ -44,7 +44,7 @@ struct OnboardingView: View {
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
             }
-            Text("Optional AI sends your prompts or voice to an online provider only when you use it. Configure it in Settings.")
+            Text("Optional AI sends the text you submit to an online provider only when you use it. Configure it in Settings.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

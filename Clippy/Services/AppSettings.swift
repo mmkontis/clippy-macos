@@ -121,11 +121,11 @@ class AppSettings: ObservableObject {
 
 
 
-// Optional voice credentials are stored in the user's macOS Keychain.
-enum VoiceCredentials {
+// Optional OpenAI credentials are stored in the user's macOS Keychain.
+enum OpenAICredentials {
     private static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.clippy.app.gemini",
+         kSecAttrService as String: "com.clippy.app.openai",
          kSecAttrAccount as String: "api-key"]
     }
 

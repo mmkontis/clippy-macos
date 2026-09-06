@@ -1,6 +1,5 @@
 import SwiftUI
 import WebKit
-import AVFoundation
 
 class ClickThroughWebView: WKWebView {
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -23,140 +22,25 @@ class ClickThroughWebView: WKWebView {
 class PenguinStateModel: ObservableObject {
     @Published var currentState: PenguinState = .thinking
     @Published var isLiveSessionActive = false
-    @Published var latestTranscript: String = "Click me to start!"
-    
+    @Published var latestTranscript = "Click me to ask Clippy."
     private var jumpingTimer: Timer?
-    private var speakingStopWork: DispatchWorkItem?
-    
-    private let geminiLive = GeminiLiveWebSocketClient()
-    private let audioService = AudioService.shared
-    
-    init() {
-        setupBindings()
-    }
-    
-    private func setupBindings() {
-        geminiLive.onAudioReceived = { [weak self] pcmData in
-            self?.audioService.playIncomingAudio(data: pcmData)
-        }
-        
-        geminiLive.onTextReceived = { [weak self] text in
-            DispatchQueue.main.async {
-                self?.latestTranscript = "AI: \(text)"
-            }
-        }
-        
-        audioService.onAudioCaptured = { [weak self] pcmData in
-            guard self?.isLiveSessionActive == true else { return }
-            self?.geminiLive.sendAudio(pcmData: pcmData)
-        }
-        
-        geminiLive.onModelSpeakingChanged = { [weak self] isSpeaking in
-            DispatchQueue.main.async {
-                self?.speakingStopWork?.cancel()
-                if isSpeaking {
-                    if self?.currentState != .jumping {
-                        self?.currentState = .speaking
-                    }
-                } else {
-                    let work = DispatchWorkItem { [weak self] in
-                        if self?.currentState == .speaking {
-                            self?.currentState = .thinking
-                        }
-                    }
-                    self?.speakingStopWork = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
-                }
-            }
-        }
-    }
-    
-    private func requestMicPermissionIfNeeded() {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        if status == .notDetermined {
-            NSApp.activate(ignoringOtherApps: true)
-            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-                if granted {
-                    DispatchQueue.main.async {
-                        self?.audioService.restartEngineWithMic()
-                    }
-                }
-            }
-        } else if status == .authorized && !audioService.isRecording {
-            audioService.restartEngineWithMic()
-        } else if status == .denied || status == .restricted {
-            DispatchQueue.main.async { [weak self] in
-                self?.latestTranscript = "Mic denied. Open System Settings > Privacy > Microphone."
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-        }
-    }
-    
-    private func startLiveSession() {
-        guard let apiKey = VoiceCredentials.read(), !apiKey.isEmpty else {
-            latestTranscript = "Add your Gemini API key in Settings to enable voice."
-            SettingsWindowController.shared.showSettings()
-            return
-        }
-        
-        isLiveSessionActive = true
-        latestTranscript = "Connecting to Gemini..."
-        
-        geminiLive.onError = { [weak self] error in
-            DispatchQueue.main.async {
-                self?.isLiveSessionActive = false
-                self?.currentState = .thinking
-                self?.latestTranscript = "Session ended. Click me to restart!"
-                self?.audioService.stopRecording()
-            }
-        }
-        
-        geminiLive.connect(apiKey: apiKey)
-        audioService.checkPermissionsAndStart()
-        
-        jump()
-    }
-    
+
     func stop() {
-        isLiveSessionActive = false
-        latestTranscript = "Click me to start!"
-        geminiLive.disconnect()
-        audioService.stopRecording()
+        jumpingTimer?.invalidate()
         currentState = .thinking
     }
-    
-    /// Called on single click: start session if not active, or flip + send context if active
+
     func handleClick() {
-        if isLiveSessionActive {
-            flipAndNotifyAI()
-        } else {
-            startLiveSession()
-        }
+        Task { @MainActor in AppDelegate.shared?.showAIPanelNearCursor() }
     }
-    
-    /// Called on double click: always flip
-    func handleDoubleClick() {
-        if isLiveSessionActive {
-            flipAndNotifyAI()
-        } else {
-            jump()
-        }
-    }
-    
-    private func flipAndNotifyAI() {
-        jump()
-        geminiLive.sendTextContext("The user just flipped you! React to it playfully.")
-    }
-    
+
+    func handleDoubleClick() { jump() }
+
     func jump() {
         jumpingTimer?.invalidate()
         currentState = .jumping
         jumpingTimer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { [weak self] _ in
-            if self?.currentState == .jumping {
-                self?.currentState = .thinking
-            }
+            self?.currentState = .thinking
         }
     }
 }

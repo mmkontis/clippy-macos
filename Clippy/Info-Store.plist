@@ -30,8 +30,6 @@
 	<string>Copyright © 2026 Clippy contributors. MIT licensed.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Clippy needs access to your microphone so you can talk to the AI penguin in real-time.</string>
 	<key>ClippyAppGroup</key>
 	<string>$(CLIPPY_APP_GROUP)</string>
 </dict>

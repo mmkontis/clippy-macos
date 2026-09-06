@@ -1,6 +1,6 @@
 # Build Clippy
 
-Install Xcode, open `Clippy.xcodeproj`, and run the Clippy scheme. Or run `./build_and_run.sh`. The public checkout includes every clipboard dependency. Clipboard history needs no private service or account.
+Install Xcode, run python3 scripts/fetch-codex.py to verify and prepare the pinned Codex runtime for Apple Silicon and Intel, then open `Clippy.xcodeproj`, and run the Clippy scheme. Or run `./build_and_run.sh`. The public checkout includes every clipboard dependency. Clipboard history needs no private service or account.
 
 ## One shared implementation
 
@@ -18,4 +18,12 @@ Sandboxed App Store builds additionally require an Apple-authorized App Group sh
 
 ## Verify and release
 
-Run `./scripts/test.sh` for shared storage, privacy filtering, and streaming tests. See [RELEASE.md](RELEASE.md) for signing and publication. Never commit credentials or label an unsigned development build as a ready-to-install release.
+Run `./scripts/test.sh` for shared storage, privacy filtering, and text AI tests. See [RELEASE.md](RELEASE.md) for signing and publication. Never commit credentials or label an unsigned development build as a ready-to-install release.
+
+## Text AI
+
+Both targets include the same text panel and two providers. API keys use macOS Keychain and the Responses API. ChatGPT sign-in uses the bundled Codex 0.153.4 App Server over stdio with a separate Clippy credential store. The helper inherits the Store sandbox; it is included at build time and never downloaded by the installed app. Its Apache license and notice ship in Resources. Do not copy a private binary from the ChatGPT desktop app.
+
+For a native-only development build, prepare python3 scripts/fetch-codex.py --arch arm64 (or x86_64) and set both ARCHS and CLIPPY_CODEX_ARCH to that architecture. Release builds must use the default universal runtime. The build fails when the required helper is missing or has the wrong architecture.
+
+Before publication, test browser sign-in, cancel, reconnect, logout, API success and quota failures, sandbox launch, and both architectures. An App Store upload must use the new text-only binary; build 8 still contains Gemini voice.
