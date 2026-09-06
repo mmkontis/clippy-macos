@@ -103,6 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         setupStatusItem()
         setupHotkey()
+        Task { await AIModelCatalog.shared.refresh() }
         
         Task { @MainActor in
             clipboardMonitor.startMonitoring()

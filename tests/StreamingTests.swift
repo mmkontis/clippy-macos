@@ -31,6 +31,28 @@ final class DelayedResponse: URLProtocol {
     override func stopLoading() { work?.cancel() }
 }
 
+final class ModelResponse: URLProtocol {
+    nonisolated(unsafe) static var calls = 0
+    private var work: DispatchWorkItem?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.calls += 1
+        precondition(request.url?.path == "/v1/models")
+        precondition(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-only-key")
+        let job = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let data = Data(#"{"data":[{"id":"gpt-5.4-mini"},{"id":"gpt-5.4"}]}"#.utf8)
+            self.client?.urlProtocol(self, didReceive: HTTPURLResponse(url: self.request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+        work = job
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.08, execute: job)
+    }
+    override func stopLoading() { work?.cancel() }
+}
+
 @main
 struct TextAITests {
     @MainActor static func main() async throws {
@@ -63,7 +85,48 @@ struct TextAITests {
         precondition(refusal == "I cannot help with that.")
 
         UserDefaults.standard.set("openAI", forKey: "textAIProvider")
-        defer { UserDefaults.standard.removeObject(forKey: "textAIProvider") }
+        defer {
+            for key in ["textAIProvider", "openAITextModel"] { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        let models = try AIModelCatalog.apiModels(Data(#"{"data":[{"id":"gpt-5.4-mini"},{"id":"gpt-5.4-mini"},{"id":"o3"},{"id":"gpt-realtime"},{"id":"gpt-image-1"},{"id":"whisper-1"},{"id":"gpt-4o-transcribe"}]}"#.utf8))
+        precondition(models.map(\.id) == ["gpt-5.4-mini", "o3"])
+        do {
+            _ = try AIModelCatalog.apiModels(Data(#"{"error":"private detail"}"#.utf8))
+            preconditionFailure("Invalid model response accepted")
+        } catch { precondition(!error.localizedDescription.contains("private detail")) }
+        let usage = TextTokenUsage.api(Data(#"{"model":"gpt-actual","usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}}"#.utf8), model: "requested")!
+        precondition(usage.model == "gpt-actual" && usage.total == 120 && usage.cached == 40)
+        precondition(TextTokenUsage.api(body, model: "requested") == nil)
+        let limits = AIUsageWindow.parse([
+            "rateLimitsByLimitId": ["codex": ["primary": ["usedPercent": 23, "windowDurationMins": 300, "resetsAt": 1_800_000_000], "secondary": NSNull()],
+                                   "extra": ["limitName": "Extra", "primary": ["usedPercent": 0]]]])
+        precondition(limits.count == 2 && limits[0].usedPercent == 23)
+        precondition(limits[0].resetsAt == Date(timeIntervalSince1970: 1_800_000_000))
+        precondition(limits[1].resetsAt == nil && limits[1].usedPercent == 0)
+        precondition(AIUsageWindow.parse([:]).isEmpty)
+        precondition(AIUsageWindow.parse(["rateLimits": ["primary": ["usedPercent": 50]]]).count == 1)
+
+        let modelConfig = URLSessionConfiguration.ephemeral
+        modelConfig.protocolClasses = [ModelResponse.self]
+        let catalog = AIModelCatalog(session: URLSession(configuration: modelConfig))
+        UserDefaults.standard.set("gpt-5.4", forKey: "openAITextModel")
+        await catalog.refresh()
+        precondition(catalog.models.count == 2 && catalog.refreshedAt != nil)
+        precondition(UserDefaults.standard.string(forKey: "openAITextModel") == "gpt-5.4", "Saved selection lost")
+        UserDefaults.standard.set("removed-model", forKey: "openAITextModel")
+        await catalog.refresh()
+        precondition(UserDefaults.standard.string(forKey: "openAITextModel") == "gpt-5.4-mini", "Unavailable selection not replaced")
+        catalog.invalidate()
+        let stale = Task { await catalog.refresh() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        UserDefaults.standard.set("none", forKey: "textAIProvider")
+        await catalog.refresh()
+        await stale.value
+        precondition(catalog.models.isEmpty && !catalog.isRefreshing, "Previous account result leaked after provider switch")
+        let calls = ModelResponse.calls
+        await catalog.refresh()
+        precondition(ModelResponse.calls == calls, "Discovery made a network call while off")
+        UserDefaults.standard.set("openAI", forKey: "textAIProvider")
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [DelayedResponse.self]
         let service = AIChatService(session: URLSession(configuration: config))
@@ -88,6 +151,6 @@ struct TextAITests {
             bridge.stop()
             try? FileManager.default.removeItem(at: root)
         }
-        print("Text AI tests passed: response parsing, errors, privacy, cancellation, provider off, Codex handshake.")
+        print("Text AI tests passed: response parsing, errors, privacy, cancellation, provider off, model discovery, selection, usage, account isolation, Codex handshake.")
     }
 }

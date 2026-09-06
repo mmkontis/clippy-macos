@@ -16,6 +16,9 @@ struct SettingsView: View {
     @State private var keyStatus = ""
     @AppStorage("textAIProvider") private var textAIProvider = AIProvider.none.rawValue
     @AppStorage("openAITextModel") private var openAITextModel = "gpt-5.4-mini"
+    @AppStorage("chatGPTTextModel") private var chatGPTTextModel = ""
+    @ObservedObject private var modelCatalog = AIModelCatalog.shared
+    @ObservedObject private var aiService = AIChatService.shared
     @ObservedObject private var codexConnection = CodexConnection.shared
     
     @ObservedObject private var navigation = SettingsNavigation.shared
@@ -194,11 +197,13 @@ struct SettingsView: View {
             }
             .onChange(of: textAIProvider) { _, value in
                 AIChatService.shared.clear()
+                modelCatalog.invalidate()
                 codexConnection.cancelLogin()
                 if value == AIProvider.chatGPT.rawValue {
                     Task { await codexConnection.refreshAccount() }
                 } else {
                     codexConnection.stop()
+                    Task { await modelCatalog.refresh() }
                 }
             }
             if textAIProvider == AIProvider.openAI.rawValue {
@@ -206,19 +211,24 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                 HStack {
                     Button("Save key") {
-                        keyStatus = OpenAICredentials.save(openAIKey) ? "Saved in Keychain." : "Couldn't save the key."
+                        let saved = OpenAICredentials.save(openAIKey)
+                        keyStatus = saved ? "Saved in Keychain." : "Couldn't save the key."
                         openAIKey = ""
+                        if saved {
+                            aiService.clear()
+                            modelCatalog.invalidate()
+                            Task { await modelCatalog.refresh() }
+                        }
                     }.disabled(openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("Remove key") {
                         AIChatService.shared.clear()
-                        keyStatus = OpenAICredentials.save("") ? "Key removed." : "Couldn't remove the key."
+                        let removed = OpenAICredentials.save("")
+                        keyStatus = removed ? "Key removed." : "Couldn't remove the key."
                         openAIKey = ""
+                        if removed { modelCatalog.invalidate() }
                     }
                 }
                 if !keyStatus.isEmpty { Text(keyStatus).font(.caption) }
-                DisclosureGroup("Model") {
-                    TextField("OpenAI model", text: $openAITextModel).textFieldStyle(.roundedBorder)
-                }
                 Text("Uses your OpenAI API billing, separately from ChatGPT. Your key stays in Keychain.")
                     .font(.caption).foregroundStyle(.secondary)
             } else if textAIProvider == AIProvider.chatGPT.rawValue {
@@ -252,6 +262,10 @@ struct SettingsView: View {
                 Text("Uses Codex through your ChatGPT account. Your plan limits apply. Clippy has a separate sign-in.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            if textAIProvider != AIProvider.none.rawValue {
+                Divider()
+                modelAndUsageSection
+            }
             Text("Only the text you send is shared with OpenAI. No voice recording. Clipboard history stays on your Mac and works without AI.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Open text AI") {
@@ -262,6 +276,67 @@ struct SettingsView: View {
         }
         .task {
             if textAIProvider == AIProvider.chatGPT.rawValue { await codexConnection.refreshAccount() }
+            else { await modelCatalog.refresh() }
+        }
+    }
+
+    private var modelAndUsageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Model & usage").font(.headline)
+                Spacer()
+                if modelCatalog.isRefreshing { ProgressView().controlSize(.small) }
+                Button("Refresh") { Task { await modelCatalog.refresh() } }
+                    .disabled(modelCatalog.isRefreshing)
+            }
+            let selected = textAIProvider == AIProvider.chatGPT.rawValue ? chatGPTTextModel : openAITextModel
+            Picker("Model", selection: Binding(
+                get: { textAIProvider == AIProvider.chatGPT.rawValue ? chatGPTTextModel : openAITextModel },
+                set: { if textAIProvider == AIProvider.chatGPT.rawValue { chatGPTTextModel = $0 } else { openAITextModel = $0 } }
+            )) {
+                if !modelCatalog.models.contains(where: { $0.id == selected }) {
+                    Text(selected.isEmpty ? "Choose a connection first" : "\(selected) (saved)").tag(selected)
+                }
+                ForEach(modelCatalog.models) { model in Text(model.title).tag(model.id) }
+            }
+            .disabled(modelCatalog.models.isEmpty)
+            Text("Models refresh automatically when Clippy starts.").font(.caption).foregroundStyle(.secondary)
+            if let refreshed = modelCatalog.refreshedAt {
+                Text("Updated \(refreshed.formatted(date: .omitted, time: .shortened))").font(.caption2).foregroundStyle(.secondary)
+            }
+            if let error = modelCatalog.modelsError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
+            if textAIProvider == AIProvider.chatGPT.rawValue {
+                Text("Codex allowance · shared across your account").font(.subheadline)
+                ForEach(modelCatalog.windows) { window in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(window.title)
+                            Spacer()
+                            Text("\(window.usedPercent)% used").monospacedDigit()
+                        }.font(.caption)
+                        ProgressView(value: Double(min(window.usedPercent, 100)), total: 100)
+                        if let reset = window.resetsAt {
+                            Text("Resets \(reset.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if let error = modelCatalog.usageError { Text(error).font(.caption).foregroundStyle(.secondary) }
+            } else {
+                Text("API usage below covers your latest Clippy reply.").font(.caption).foregroundStyle(.secondary)
+                Link("Open API usage dashboard", destination: URL(string: "https://platform.openai.com/usage")!).font(.caption)
+            }
+            if let usage = aiService.lastUsage, usage.provider.rawValue == textAIProvider {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Last reply · \(usage.model)").font(.caption).fontWeight(.medium)
+                    Text("\(usage.input.formatted()) input · \(usage.output.formatted()) output tokens (\(usage.cached.formatted()) input cached)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Token usage appears after your next reply.").font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 

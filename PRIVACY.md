@@ -12,6 +12,8 @@ The API-key option uses OpenAI's Responses API with storage disabled. The key st
 
 The ChatGPT option uses the bundled, Apache-licensed Codex runtime and your ChatGPT account's Codex allowance. Codex manages sign-in in a Clippy-specific Keychain credential store. Clippy does not read OAuth tokens or your other Codex account. It uses temporary conversations and disables tools and local environment access. Model requests include the submitted text and the standard context needed by the Codex service. OpenAI's ChatGPT/Codex terms, plan limits, and data controls apply.
 
+With AI enabled, Clippy fetches available models at startup and after connection changes. ChatGPT also provides account allowance and reset times. Model lists and usage figures stay in memory; only your chosen model is saved. API token counts cover the latest successful Clippy reply, not your account-wide bill.
+
 Clippy does not keep a transcript log. The current prompt and answer remain in memory until cleared or the app exits. Disconnect ChatGPT or remove the API key in Settings to remove the respective saved credentials. No microphone permission or voice service is included in version 1.3.
 
 ## Earlier downloads

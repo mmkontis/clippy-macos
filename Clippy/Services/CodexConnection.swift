@@ -11,6 +11,8 @@ final class CodexConnection: ObservableObject {
     @Published var status = "Connect your ChatGPT account to use its Codex allowance."
     @Published var userCode: String?
     @Published var verificationURL: URL?
+    private(set) var lastUsage: TextTokenUsage?
+    private var activeModel = "ChatGPT"
 
     private var process: Process?
     private var input: FileHandle?
@@ -90,6 +92,7 @@ final class CodexConnection: ObservableObject {
             let account = result["account"] as? [String: Any]
             isConnected = account?["type"] as? String == "chatgpt"
             status = isConnected ? "ChatGPT connected. Your Codex plan limits apply." : "Connect your ChatGPT account to use its Codex allowance."
+            if isConnected { await AIModelCatalog.shared.refresh() }
         } catch {
             isConnected = false
             status = safeMessage(error)
@@ -104,6 +107,9 @@ final class CodexConnection: ObservableObject {
             _ = try await rpc("account/logout")
             isConnected = false
             status = "ChatGPT disconnected from Clippy."
+            lastUsage = nil
+            AIChatService.shared.clear()
+            AIModelCatalog.shared.invalidate()
             stop()
         } catch {
             status = "Couldn't sign out. Try again before removing Clippy."
@@ -122,7 +128,45 @@ final class CodexConnection: ObservableObject {
         if !isConnected { status = "Sign-in cancelled. You can connect again." }
     }
 
-    func reply(to prompt: String) async throws -> String {
+    func availableModels() async throws -> [AIModelOption] {
+        try await start()
+        let account = try await rpc("account/read", ["refreshToken": false])["account"] as? [String: Any]
+        guard account?["type"] as? String == "chatgpt" else {
+            throw TextAIError.message("Connect ChatGPT to discover your models.")
+        }
+        isConnected = true
+        status = "ChatGPT connected. Your Codex plan limits apply."
+        var models: [AIModelOption] = []
+        var cursor: String?
+        var cursors = Set<String>()
+        repeat {
+            var params: [String: Any] = ["limit": 100, "includeHidden": false]
+            if let cursor { params["cursor"] = cursor }
+            let page = try await rpc("model/list", params)
+            guard let items = page["data"] as? [[String: Any]] else {
+                throw TextAIError.message("ChatGPT returned an unexpected model list.")
+            }
+            for item in items {
+                guard item["hidden"] as? Bool != true,
+                      let id = item["model"] as? String, !id.isEmpty,
+                      (item["inputModalities"] as? [String] ?? ["text"]).contains("text"),
+                      !models.contains(where: { $0.id == id }) else { continue }
+                models.append(.init(id: id, title: item["displayName"] as? String ?? id, isDefault: item["isDefault"] as? Bool == true))
+            }
+            cursor = page["nextCursor"] as? String
+            if let cursor, !cursors.insert(cursor).inserted || cursors.count > 20 {
+                throw TextAIError.message("Couldn't finish loading models. Refresh to try again.")
+            }
+        } while cursor != nil
+        return models
+    }
+
+    func readRateLimits() async throws -> [String: Any] {
+        try await start()
+        return try await rpc("account/rateLimits/read")
+    }
+
+    func reply(to prompt: String, model: String? = nil) async throws -> String {
         try await start()
         try Task.checkCancellation()
         let account = try await rpc("account/read", ["refreshToken": false])["account"] as? [String: Any]
@@ -131,7 +175,8 @@ final class CodexConnection: ObservableObject {
             throw TextAIError.message("Connect your ChatGPT account in Settings first.")
         }
         isConnected = true
-        let result = try await rpc("thread/start", [
+        lastUsage = nil
+        var threadParams: [String: Any] = [
             "cwd": root.appendingPathComponent("workspace").path,
             "ephemeral": true,
             "approvalPolicy": "never",
@@ -146,7 +191,10 @@ final class CodexConnection: ObservableObject {
                 "tools.view_image": false,
                 "web_search": "disabled"
             ]
-        ])
+        ]
+        if let model, !model.isEmpty { threadParams["model"] = model }
+        let result = try await rpc("thread/start", threadParams)
+        activeModel = result["model"] as? String ?? model ?? "ChatGPT"
         try Task.checkCancellation()
         guard let thread = result["thread"] as? [String: Any], let id = thread["id"] as? String else {
             throw TextAIError.message("Couldn't start a ChatGPT conversation.")
@@ -358,8 +406,22 @@ final class CodexConnection: ObservableObject {
             loginTimeout?.cancel()
             isConnected = params["success"] as? Bool == true
             status = isConnected ? "ChatGPT connected. Your Codex plan limits apply." : "Sign-in wasn't completed. Try again."
+            AIModelCatalog.shared.invalidate()
+            if isConnected { Task { await AIModelCatalog.shared.refresh() } }
         case "account/updated":
             isConnected = params["authMode"] as? String == "chatgpt"
+            if !isConnected {
+                lastUsage = nil
+                AIModelCatalog.shared.invalidate()
+            }
+        case "account/rateLimits/updated":
+            AIModelCatalog.shared.updateLimits(params)
+        case "thread/tokenUsage/updated":
+            guard params["threadId"] as? String == activeThread,
+                  let usage = (params["tokenUsage"] as? [String: Any])?["total"] as? [String: Any],
+                  let input = usage["inputTokens"] as? Int,
+                  let output = usage["outputTokens"] as? Int else { return }
+            lastUsage = .init(provider: .chatGPT, model: activeModel, input: max(0, input), output: max(0, output), cached: max(0, usage["cachedInputTokens"] as? Int ?? 0))
         case "item/completed":
             guard params["threadId"] as? String == activeThread,
                   let item = params["item"] as? [String: Any],

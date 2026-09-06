@@ -59,6 +59,10 @@ struct AIPanel: View {
                     .padding(12)
             }
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            if let usage = aiService.lastUsage {
+                Text("\(usage.model) · \(usage.total.formatted()) tokens")
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
             HStack {
                 Text("Only text you send is shared with OpenAI.")
                     .font(.caption).foregroundStyle(.secondary)
