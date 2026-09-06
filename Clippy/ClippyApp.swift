@@ -54,12 +54,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
         if CommandLine.arguments.contains("--preview-text-ai") {
+            setbuf(stdout, nil)
             AppDelegate.shared = self
             ClipboardKitConfig.storageFolderName = "ClippyTextAIPreview"
             #if APP_STORE
             ClipboardKitConfig.allowsSimulatedKeystrokes = false
             #endif
             setupStatusItem()
+            setupHotkey()
             SettingsWindowController.shared.showSettings()
             return
         }
@@ -140,61 +142,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clippy")
-            button.action = #selector(statusItemClicked(_:))
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem?.button?.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clippy")
+        statusItem?.button?.toolTip = "Clippy"
+        let menu = NSMenu(title: "Clippy")
+        func item(_ title: String, _ action: Selector, key: String = "", symbol: String? = nil) -> NSMenuItem {
+            let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            entry.target = self
+            if let symbol { entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+            menu.addItem(entry)
+            return entry
         }
-    }
-    
-    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        let event = NSApp.currentEvent!
-        
-        if event.type == .rightMouseUp {
-            // Show context menu on right-click
-            showContextMenu()
-        } else {
-            // Toggle panel on left-click
-            togglePanel()
-        }
-    }
-    
-    private func showContextMenu() {
-        let menu = NSMenu()
-        
-        menu.addItem(NSMenuItem(title: "Show Clipboard History", action: #selector(showPanel), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Ask Clippy...", action: #selector(openTextAI), keyEquivalent: ""))
-
-        let dictationItem = NSMenuItem(title: "Get Coworker Dictation", action: #selector(openDictationMode), keyEquivalent: "")
-        dictationItem.target = self
+        _ = item("Clipboard", #selector(showPanel), symbol: "clipboard")
+        _ = item("Ask Clippy…", #selector(openTextAI), symbol: "sparkles")
+        menu.addItem(.separator())
+        _ = item("Settings…", #selector(openSettings), key: ",", symbol: "gearshape")
+        _ = item("Check for Updates…", #selector(checkForUpdates), symbol: "arrow.down.circle")
+        _ = item("About Clippy", #selector(openAbout), symbol: "info.circle")
+        menu.addItem(.separator())
+        let coworker = item("Get Coworker", #selector(openDictationMode))
         if let logo = NSImage(named: "CoworkerLogo")?.copy() as? NSImage {
             logo.size = NSSize(width: 18, height: 18)
-            dictationItem.image = logo
+            coworker.image = logo
         }
-
-        menu.addItem(dictationItem)
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Customize Penguin...", action: #selector(openPenguinCreator), keyEquivalent: "p"))
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        #if !APP_STORE
-        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "u")
-        updateItem.target = updaterController
-        menu.addItem(updateItem)
-        menu.addItem(NSMenuItem.separator())
-        #endif
-        menu.addItem(NSMenuItem(title: "Quit Clippy", action: #selector(quitApp), keyEquivalent: "q"))
-        
+        menu.addItem(.separator())
+        _ = item("Quit Clippy", #selector(quitApp), key: "q")
         statusItem?.menu = menu
-        statusItem?.button?.performClick(nil)
-        statusItem?.menu = nil
     }
-    
+
+    @objc func checkForUpdates() {
+        #if APP_STORE
+        if let url = URL(string: "macappstore://apps.apple.com/app/id6809036065") { NSWorkspace.shared.open(url) }
+        #else
+        updaterController.checkForUpdates(nil)
+        #endif
+    }
+
+    @objc private func openAbout() {
+        SettingsWindowController.shared.showSettings(page: .about)
+    }
+
     private func togglePanel() {
         if let window = panelWindow, window.isVisible {
             hidePanel()
@@ -204,27 +190,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func showPanel() {
-        Task { @MainActor in
-            showPanelWindow(nearCursor: false)
-        }
+        showPanelWindow(nearCursor: false)
     }
 
-    /// Opens the clipboard panel and reveals the dictation download banner.
     @objc private func openDictationMode() {
-        Task { @MainActor in
-            DictationPromo.shared.reveal()
-            showPanelWindow(nearCursor: false)
-        }
+        DictationPromo.shared.openDownloadPage()
     }
     
     func showPanelNearCursor() {
-        Task { @MainActor in
-            showPanelWindow(nearCursor: true)
-        }
+        showPanelWindow(nearCursor: true)
     }
     
     @MainActor
     private func showPanelWindow(nearCursor: Bool = false) {
+        #if DEBUG
+        print("Clippy: opening clipboard window")
+        #endif
         // Store the currently active application before we take focus
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -279,8 +260,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Position panel
         positionPanel(panel, nearCursor: nearCursor)
         
-        // Show the panel with animation
+        // Activate explicitly so the shortcut also works after every window closes.
+        panel.title = "Clippy Clipboard"
         panel.alphaValue = 0
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -289,6 +272,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         panelWindow = panel
+        #if DEBUG
+        print("Clippy: clipboard window visible: \(panel.isVisible)")
+        #endif
         
         // Show media bar at bottom of screen
         showMediaBar()
@@ -556,7 +542,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showPanelNearCursor()
         }
         hotkeyHandler.onAIHotkeyPressed = { [weak self] in
-            // Show AI panel near cursor when triggered by Cmd+Shift+CapsLock
+            // Open the optional text panel from its shortcut.
             self?.showAIPanelNearCursor()
         }
         hotkeyHandler.onPenguinHotkeyPressed = { [weak self] in
@@ -588,9 +574,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - AI Panel
     
     func showAIPanelNearCursor() {
-        Task { @MainActor in
-            showAIPanelWindow(nearCursor: true)
-        }
+        showAIPanelWindow(nearCursor: true)
     }
     
     @MainActor
@@ -653,7 +637,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Position panel near cursor
         positionAIPanel(panel, nearCursor: nearCursor)
         
-        // Show the panel
+        panel.title = "Ask Clippy"
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         
         aiPanelWindow = panel
@@ -715,7 +700,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+    override var canBecomeMain: Bool { true }
     
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {

@@ -1,6 +1,5 @@
 import SwiftUI
 import Carbon
-import AVFoundation
 import ClipboardKit
 #if !APP_STORE
 import Sparkle
@@ -21,197 +20,143 @@ struct SettingsView: View {
     @AppStorage("openAITextModel") private var openAITextModel = "gpt-5.4-mini"
     @ObservedObject private var codexConnection = CodexConnection.shared
     
+    @ObservedObject private var navigation = SettingsNavigation.shared
+    @ObservedObject private var hotkeys = HotkeyHandler.shared
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 16) {
-                // App Icon
-                if let image = NSImage(named: "AppIcon") {
-                    Image(nsImage: image)
-                        .resizable()
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
-                } else {
-                    // Fallback
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(
-                            LinearGradient(
-                                colors: [.blue, .cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Image(systemName: "clipboard")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                        )
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Clippy")
-                        .font(.system(size: 20, weight: .bold))
-                    Text("Clipboard Manager")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-            .padding(24)
-            .background(Color(nsColor: .windowBackgroundColor))
-            
+        HStack(spacing: 0) {
+            sidebar
             Divider()
-            
-            // Settings content
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // General section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("General", systemImage: "slider.horizontal.3")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.blue)
-                        
-                        HStack {
-                            Text("Auto-paste on select:")
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                                Toggle("", isOn: $settings.autoPaste)
-                                    .disabled(!ClipboardKitConfig.allowsSimulatedKeystrokes)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-                        
-                        Text(ClipboardKitConfig.allowsSimulatedKeystrokes ? "Automatically paste the selected item into the previously active app" : "Select an item, then press Command-V in your destination app.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
-                        
-                        Divider()
-                            .padding(.vertical, 4)
-                            
-                        HStack {
-                            Text("Show Media Bar:")
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                                Toggle("", isOn: $settings.showMediaBar)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-                        
-                        Text("Display a bar at the bottom with recent images and files")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
-
-                        Divider()
-                            .padding(.vertical, 4)
-
-                        HStack {
-                            Text("Dismiss recent stack after paste:")
-                                .foregroundColor(.secondary)
-
-                            Spacer()
-
-                                Toggle("", isOn: $settings.dismissRecentOnPaste)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-
-                        Text("When you press ⌘V or ⌃V in another app, remove the top tile from the bottom-left stack. The item stays in your clipboard history.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
-
-                        Divider()
-                            .padding(.vertical, 4)
-
-                        HStack {
-                            Text("Launch at login:")
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                                Toggle("", isOn: $settings.launchAtLogin)
-                                    .toggleStyle(.switch)
-                                    .tint(.blue)
-                        }
-                        
-                        Text("Automatically start Clippy when you log in")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary.opacity(0.8))
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(navigation.page.title).font(.system(size: 30, weight: .bold))
+                    Text(navigation.page.subtitle).foregroundStyle(.secondary)
+                }
+                .padding(32)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        pageContent
                     }
-                    
-                    Divider()
-                    
-                    // Permissions section
-                    #if !APP_STORE
-                    permissionsSection
-                    #endif
-                    
-                    Divider()
-                    
-                    cloudAISection
-                    Divider()
-                    // Penguin section
-                    penguinSection
-
-                    Divider()
-
-                    // Dictation section
-                    dictationSection
-
-                    Divider()
-
-                    // Hotkey section
-                    hotkeySection
-                    
-                    Divider()
-                    
-                    // History section
-                    historySection
-                    
-                    Divider()
-                    
-                    // About section
-                    aboutSection
-                    
-                    Divider()
-                    
-                    // Reset section
-                    resetSection
+                    .frame(maxWidth: 680, alignment: .leading)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 32)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(20)
             }
-            
-            Divider()
-            
-            // Footer
-            HStack {
-                Spacer()
-                Button("Done") {
-                    NSApp.keyWindow?.close()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-            }
-            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(width: 500, height: 650)
-        .onAppear {
-            checkPermissions()
-        }
+        .frame(minWidth: 800, minHeight: 580)
+        .tint(CoworkerBrand.blue)
+        .onAppear { checkPermissions() }
         .onChange(of: settings.maxHistoryItems) { _, _ in
             ClipboardManager.shared.enforceHistoryLimit()
         }
     }
-    
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 10) {
+                Image("ClippyLogo").resizable().scaledToFit()
+                    .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Clippy").font(.system(size: 18, weight: .bold))
+                    Text("Your clipboard, with a memory.").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 8)
+            VStack(spacing: 4) {
+                ForEach(SettingsPage.allCases) { page in
+                    Button { navigation.page = page } label: {
+                        Label(page.title, systemImage: page.symbol)
+                            .font(.system(size: 13, weight: navigation.page == page ? .semibold : .regular))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12).padding(.vertical, 10)
+                            .background(navigation.page == page ? Color.primary.opacity(0.07) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(navigation.page == page ? .isSelected : [])
+                }
+            }
+            Spacer()
+            Button { DictationPromo.shared.openDownloadPage() } label: {
+                HStack(spacing: 10) {
+                    Image("CoworkerLogo").resizable().scaledToFit().frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Get Coworker").font(.system(size: 12, weight: .semibold))
+                        Text("Free voice typing").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(.secondary)
+                }.padding(10)
+            }.buttonStyle(.plain)
+            Text("Free. Open source. Yours.").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 10)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 24)
+        .frame(width: 204)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    @ViewBuilder private var pageContent: some View {
+        switch navigation.page {
+        case .general:
+            card {
+                settingsToggle("Launch at login", detail: "Keep Clippy ready when your Mac starts.", value: $settings.launchAtLogin)
+            }
+            card { hotkeySection }
+            #if !APP_STORE
+            card { permissionsSection }
+            #endif
+        case .clipboard:
+            card {
+                if ClipboardKitConfig.allowsSimulatedKeystrokes {
+                    settingsToggle("Paste on select", detail: "Insert a selected clip into the previous app.", value: $settings.autoPaste)
+                    Divider()
+                } else {
+                    Label("Choose a clip, then press Command-V to paste.", systemImage: "doc.on.clipboard")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Divider()
+                }
+                settingsToggle("Media bar", detail: "Keep recent images and files within reach.", value: $settings.showMediaBar)
+                Divider()
+                settingsToggle("Dismiss recent tiles after paste", detail: "Clips remain in your history.", value: $settings.dismissRecentOnPaste)
+            }
+            card { historySection }
+        case .textAI:
+            card { cloudAISection }
+        case .companion:
+            card { penguinSection }
+        case .about:
+            card { aboutSection }
+            card { resetSection }
+        }
+    }
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 18, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(22)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.05)))
+    }
+
+    private func settingsToggle(_ title: String, detail: String, value: Binding<Bool>) -> some View {
+        HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle(title, isOn: value).labelsHidden().toggleStyle(.switch)
+        }
+    }
+
     private var cloudAISection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Optional text AI", systemImage: "sparkles").font(.headline)
+            Text("Your connection").font(.headline)
             Picker("Use AI with", selection: $textAIProvider) {
                 ForEach(AIProvider.allCases) { provider in
                     Text(provider.title).tag(provider.rawValue)
@@ -269,7 +214,10 @@ struct SettingsView: View {
             }
             Text("Only the text you send is shared with OpenAI. No voice recording. Clipboard history stays on your Mac and works without AI.")
                 .font(.caption).foregroundStyle(.secondary)
-            Button("Open text AI") { AppDelegate.shared?.showAIPanelNearCursor() }
+            Button("Open text AI") {
+                SettingsWindowController.shared.hide()
+                AppDelegate.shared?.showAIPanelNearCursor()
+            }.buttonStyle(.borderedProminent)
                 .disabled(textAIProvider == AIProvider.none.rawValue)
         }
         .task {
@@ -283,7 +231,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Permissions", systemImage: "lock.shield")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             Text("Enable only the permissions for the features you use:")
                 .font(.system(size: 12))
@@ -374,7 +322,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("AI Penguin", systemImage: "bird")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             HStack(spacing: 16) {
                 let theme = PenguinCustomization.shared.colorTheme
@@ -472,7 +420,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Keyboard Shortcut", systemImage: "keyboard")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             HStack {
                 Text("Open Clipboard History:")
@@ -487,7 +435,19 @@ struct SettingsView: View {
                 )
             }
             
-            Text("Click the shortcut field and press your desired key combination")
+            if let message = hotkeys.registrationMessage {
+                Text(message).font(.callout).foregroundStyle(hotkeys.isActive ? Color.secondary : .orange)
+            }
+            HStack {
+                Button("Open clipboard") {
+                    SettingsWindowController.shared.hide()
+                    AppDelegate.shared?.showPanelNearCursor()
+                }
+                if !hotkeys.isActive {
+                    Button("Use an available shortcut") { hotkeys.useAvailableShortcut() }
+                }
+            }
+            Text("Click the shortcut to change it. No permission is needed.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
@@ -499,7 +459,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("History", systemImage: "clock.arrow.circlepath")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             Text("Clippy and updated Coworker share up to 400 recent clips on this Mac. Deleting or clearing history affects both apps. Your display limit only changes this list.")
                 .font(.caption)
@@ -540,7 +500,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("About", systemImage: "info.circle")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.blue)
+                .foregroundColor(.primary)
             
             HStack {
                 Text("Clippy")
@@ -554,11 +514,8 @@ struct SettingsView: View {
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
             
-            #if !APP_STORE
             Button {
-                if let appDelegate = AppDelegate.shared {
-                    appDelegate.updaterController.checkForUpdates(nil)
-                }
+                AppDelegate.shared?.checkForUpdates()
             } label: {
                 HStack {
                     Image(systemName: "arrow.triangle.2.circlepath")
@@ -567,7 +524,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            #endif
+            Link("Source code", destination: URL(string: "https://github.com/mmkontis/clippy-macos")!)
         }
     }
     
@@ -616,6 +573,7 @@ struct SettingsView: View {
         
         // Reset all settings
         AppSettings.shared.resetAllSettings()
+        HotkeyHandler.shared.reregisterHotkey()
         
         // Close settings window
         NSApp.keyWindow?.close()
@@ -648,7 +606,7 @@ struct HotkeyRecorderView: View {
             HStack(spacing: 4) {
                 if isRecording {
                     Text("Press keys...")
-                        .foregroundColor(.blue)
+                        .foregroundColor(.primary)
                 } else {
                     Text(hotkeyDisplayString)
                         .foregroundColor(.primary)
@@ -667,6 +625,7 @@ struct HotkeyRecorderView: View {
             )
         }
         .buttonStyle(.plain)
+        .onDisappear { stopRecording(); isRecording = false }
     }
     
     private var hotkeyDisplayString: String {
@@ -710,7 +669,13 @@ struct HotkeyRecorderView: View {
     }
     
     private func startRecording() {
+        HotkeyHandler.shared.stopListening()
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                self.isRecording = false
+                self.stopRecording()
+                return nil
+            }
             // Get modifiers
             var mods: UInt32 = 0
             if event.modifierFlags.contains(.command) {
@@ -733,9 +698,6 @@ struct HotkeyRecorderView: View {
                 self.isRecording = false
                 self.stopRecording()
                 
-                // Re-register the hotkey
-                AppSettings.shared.saveSettings()
-                HotkeyHandler.shared.reregisterHotkey()
             }
             
             return nil // Consume the event
@@ -746,44 +708,75 @@ struct HotkeyRecorderView: View {
         if let monitor = localMonitor {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
+            HotkeyHandler.shared.startListening()
         }
     }
 }
 
 // MARK: - Settings Window Controller
 
-class SettingsWindowController {
-    static let shared = SettingsWindowController()
-    
-    private var window: NSWindow?
-    
-    func showSettings() {
-        if let existingWindow = window, existingWindow.isVisible {
-            existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case general, clipboard, textAI, companion, about
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .clipboard: return "Clipboard"
+        case .textAI: return "Text AI"
+        case .companion: return "Companion"
+        case .about: return "About Clippy"
         }
-        
-        let settingsView = SettingsView()
-        let hostingController = NSHostingController(rootView: settingsView)
-        
-        let newWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 650),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        
-        newWindow.contentViewController = hostingController
-        newWindow.title = "Clippy Settings"
-        newWindow.center()
-        newWindow.isReleasedWhenClosed = false
-        newWindow.makeKeyAndOrderFront(nil)
-        
-        NSApp.activate(ignoringOtherApps: true)
-        
-        window = newWindow
     }
+    var subtitle: String {
+        switch self {
+        case .general: return "Make Clippy feel at home on your Mac."
+        case .clipboard: return "A little less searching. A little more doing."
+        case .textAI: return "Write, rewrite and summarize. Always optional."
+        case .companion: return "A little personality for your desktop."
+        case .about: return "Your clipboard, with a memory."
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .general: return "slider.horizontal.3"
+        case .clipboard: return "clipboard"
+        case .textAI: return "sparkles"
+        case .companion: return "bird"
+        case .about: return "info.circle"
+        }
+    }
+}
+
+@MainActor final class SettingsNavigation: ObservableObject {
+    static let shared = SettingsNavigation()
+    @Published var page: SettingsPage = .general
+}
+
+@MainActor final class SettingsWindowController {
+    static let shared = SettingsWindowController()
+    private var window: NSWindow?
+
+    func showSettings(page: SettingsPage? = nil) {
+        if let page { SettingsNavigation.shared.page = page }
+        if window == nil {
+            let newWindow = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 940, height: 680),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered, defer: false
+            )
+            newWindow.contentViewController = NSHostingController(rootView: SettingsView())
+            newWindow.title = "Clippy Settings"
+            newWindow.minSize = NSSize(width: 800, height: 580)
+            newWindow.setFrameAutosaveName("ClippyDesktopSettings")
+            newWindow.center()
+            newWindow.isReleasedWhenClosed = false
+            window = newWindow
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    func hide() { window?.orderOut(nil) }
 }
 
 #Preview {

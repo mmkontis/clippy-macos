@@ -59,7 +59,7 @@ class AppSettings: ObservableObject {
     private init() {
         // Load saved settings or use defaults
         self.hotkeyModifiers = UInt32(defaults.integer(forKey: "hotkeyModifiers"))
-        self.hotkeyKeyCode = UInt32(defaults.integer(forKey: "hotkeyKeyCode"))
+        self.hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") == nil ? UInt32(kVK_ANSI_V) : UInt32(defaults.integer(forKey: "hotkeyKeyCode"))
         self.maxHistoryItems = defaults.integer(forKey: "maxHistoryItems")
         self.clearHistoryOnQuit = defaults.bool(forKey: "clearHistoryOnQuit")
         self.autoPaste = defaults.object(forKey: "autoPaste") != nil ? defaults.bool(forKey: "autoPaste") : true
@@ -73,9 +73,6 @@ class AppSettings: ObservableObject {
         // Set defaults if not set
         if hotkeyModifiers == 0 {
             hotkeyModifiers = UInt32(cmdKey | shiftKey)
-        }
-        if hotkeyKeyCode == 0 {
-            hotkeyKeyCode = UInt32(kVK_ANSI_V)
         }
         if maxHistoryItems == 0 {
             maxHistoryItems = 100

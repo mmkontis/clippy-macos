@@ -10,3 +10,6 @@ if [ -x .build/codex/universal/codex ]; then
 else
   "$CLIPPY_TEST_DIR/streaming-tests"
 fi
+
+swiftc -parse-as-library Clippy/Services/HotkeyHandler.swift tests/HotkeyTests.swift -o "$CLIPPY_TEST_DIR/hotkey-tests"
+"$CLIPPY_TEST_DIR/hotkey-tests"

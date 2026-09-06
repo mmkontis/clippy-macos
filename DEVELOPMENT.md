@@ -27,3 +27,9 @@ Both targets include the same text panel and two providers. API keys use macOS K
 For a native-only development build, prepare python3 scripts/fetch-codex.py --arch arm64 (or x86_64) and set both ARCHS and CLIPPY_CODEX_ARCH to that architecture. Release builds must use the default universal runtime. The build fails when the required helper is missing or has the wrong architecture.
 
 Before publication, test browser sign-in, cancel, reconnect, logout, API success and quota failures, sandbox launch, and both architectures. An App Store upload must use the new text-only binary; build 8 still contains Gemini voice.
+
+## Desktop controls
+
+Click the menu bar icon for Clipboard, Text AI, Settings, Updates, About and Get Coworker. Settings uses a resizable sidebar window. Store updates open the App Store; direct updates use Sparkle.
+
+The default clipboard shortcut is Command-Shift-V. When another app already owns it, Clippy chooses an available alternative and shows the actual binding in General settings. Recording a new shortcut pauses existing bindings; Escape cancels. Key code zero is a valid A key and is preserved across launches.

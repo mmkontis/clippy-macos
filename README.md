@@ -18,7 +18,7 @@
 ### Copy. Find. Reuse.
 
 1. Open Clippy. The welcome screen takes a moment and is optional.
-2. Copy anything. Press **⌘⇧V** to search your history.
+2. Copy anything. Press **⌘⇧V** to search your history (or the shortcut shown in Settings).
 3. Choose an item and paste. Enable optional Accessibility for automatic paste.
 
 History stays on your Mac. Updated Clippy and Coworker builds automatically combine it, without an account. The Coworker dictation banner is optional and dismissible.

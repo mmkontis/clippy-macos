@@ -15,7 +15,7 @@ struct AIPanel: View {
             HStack {
                 Label("Ask Clippy", systemImage: "sparkles").font(.headline)
                 Spacer()
-                Button { SettingsWindowController.shared.showSettings() } label: {
+                Button { SettingsWindowController.shared.showSettings(page: .textAI) } label: {
                     Image(systemName: "gearshape")
                 }.help("AI settings")
                 Button { onSwitchToClipboard?() } label: {
