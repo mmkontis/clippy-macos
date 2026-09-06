@@ -133,6 +133,9 @@ struct SettingsView: View {
         case .clipboard:
             card {
                 settingsToggle("Launch at login", detail: "Keep Clippy ready when your Mac starts.", value: $settings.launchAtLogin)
+                if let message = settings.launchAtLoginMessage {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                }
                 Divider()
                 if ClipboardKitConfig.allowsSimulatedKeystrokes {
                     settingsToggle("Paste on select", detail: "Insert a selected clip into the previous app.", value: $settings.autoPaste)

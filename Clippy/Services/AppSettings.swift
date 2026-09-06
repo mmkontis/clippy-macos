@@ -35,17 +35,38 @@ class AppSettings: ObservableObject {
         didSet { saveSettings() }
     }
     
-    // Launch at login setting
+    // Default on. An explicit choice in Settings persists across launches.
     @Published var launchAtLogin: Bool {
         didSet {
-            if launchAtLogin {
-                try? SMAppService.mainApp.register()
-            } else {
-                try? SMAppService.mainApp.unregister()
-            }
+            defaults.set(launchAtLogin, forKey: "launchAtLogin")
+            configureLaunchAtLogin()
         }
     }
-    
+    @Published private(set) var launchAtLoginMessage: String?
+
+    func configureLaunchAtLogin() {
+        #if DEBUG
+        // Listing and UI previews must never install a temporary build as a login item.
+        if CommandLine.arguments.contains("--preview-text-ai") || CommandLine.arguments.contains("--capture-listing") { return }
+        #endif
+        launchAtLoginMessage = nil
+        do {
+            let service = SMAppService.mainApp
+            if launchAtLogin {
+                if service.status != .enabled && service.status != .requiresApproval {
+                    try service.register()
+                }
+                if service.status == .requiresApproval {
+                    launchAtLoginMessage = "Allow Clippy in System Settings → General → Login Items to finish enabling this."
+                }
+            } else if service.status == .enabled || service.status == .requiresApproval {
+                try service.unregister()
+            }
+        } catch {
+            launchAtLoginMessage = "Couldn't update Login Items. Check System Settings → General → Login Items."
+        }
+    }
+
     // Whether to suppress the accessibility permission alert (user clicked "Later")
     @Published var suppressAccessibilityAlert: Bool {
         didSet { saveSettings() }
@@ -68,7 +89,7 @@ class AppSettings: ObservableObject {
         self.suppressAccessibilityAlert = defaults.bool(forKey: "suppressAccessibilityAlert")
         self.hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         
-        self.launchAtLogin = SMAppService.mainApp.status == .enabled
+        self.launchAtLogin = defaults.object(forKey: "launchAtLogin") == nil ? true : defaults.bool(forKey: "launchAtLogin")
 
         // Set defaults if not set
         if hotkeyModifiers == 0 {
@@ -98,9 +119,6 @@ class AppSettings: ObservableObject {
             defaults.removePersistentDomain(forName: bundleId)
         }
         
-        // Unregister from login items
-        try? SMAppService.mainApp.unregister()
-        
         // Reset in-memory values to defaults
         hotkeyModifiers = UInt32(cmdKey | shiftKey)
         hotkeyKeyCode = UInt32(kVK_ANSI_V)
@@ -109,7 +127,7 @@ class AppSettings: ObservableObject {
         autoPaste = true
         showMediaBar = false
         dismissRecentOnPaste = true
-        launchAtLogin = false
+        launchAtLogin = true
         suppressAccessibilityAlert = false
         hasCompletedOnboarding = false
     }

@@ -91,6 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ClipboardKitConfig.sharedContainerURL = container
         ClipboardKitConfig.allowsSimulatedKeystrokes = false
         #endif
+        AppSettings.shared.configureLaunchAtLogin()
         ClipboardKitConfig.enableSharedHistory(client: "clippy")
         ClipboardKitConfig.maximumHistoryItems = { AppSettings.shared.maxHistoryItems }
         ClipboardKitConfig.dismissOnPasteEnabled = { AppSettings.shared.dismissRecentOnPaste }
