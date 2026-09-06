@@ -827,7 +827,16 @@ extension AppDelegate {
             print("\(passed ? "PASS" : "FAIL"): \(message)")
             if !passed { exit(1) }
         }
+        NSApp.setActivationPolicy(.regular)
         SettingsWindowController.shared.showSettings()
+        // macOS can deny foreground activation to a background CLI launch.
+        // Focus checks require selecting this test app first, not a fake key event.
+        print("Waiting for the test app to become active…")
+        for _ in 0..<100 {
+            if NSApp.isActive { break }
+            await pause()
+        }
+        check(NSApp.isActive, "Native test app has foreground focus")
         await pause()
         guard let settingsWindow = NSApp.windows.first(where: { $0.title == "Clippy Settings" }) else {
             check(false, "Settings window exists"); return
