@@ -31,6 +31,7 @@ struct SettingsView: View {
                     Text("Make Clippy yours.").foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 32).padding(.top, 44).padding(.bottom, 24)
+                GeometryReader { viewport in
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 36) {
@@ -39,6 +40,7 @@ struct SettingsView: View {
                                     Text(section.title).font(.system(size: 20, weight: .semibold))
                                     sectionContent(section)
                                 }
+                                .frame(minHeight: section == .about ? max(0, viewport.size.height - 80) : 0, alignment: .topLeading)
                                 .id(section)
                                 .background(GeometryReader { geometry in
                                     Color.clear.preference(key: SettingsSectionPositions.self,
@@ -65,6 +67,7 @@ struct SettingsView: View {
                         }
                     }
                     .onAppear { proxy.scrollTo(navigation.requestedPage, anchor: .top) }
+                }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
