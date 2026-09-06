@@ -150,7 +150,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 460),
             styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false
         )
-        newWindow.contentViewController = NSHostingController(rootView: view)
+        let hosting = NSHostingView(rootView: view)
+        hosting.sizingOptions = []
+        hosting.safeAreaRegions = []
+        newWindow.contentView = hosting
+        newWindow.setFrame(NSRect(x: 0, y: 0, width: 720, height: 460), display: false)
         newWindow.title = "Welcome to Clippy"
         newWindow.titleVisibility = .hidden
         newWindow.titlebarAppearsTransparent = true
