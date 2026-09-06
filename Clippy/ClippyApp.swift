@@ -1,7 +1,11 @@
 import SwiftUI
 import AppKit
 import ApplicationServices
+#if DEBUG
+@testable import ClipboardKit
+#else
 import ClipboardKit
+#endif
 #if !APP_STORE
 import Sparkle
 #endif
@@ -71,6 +75,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if CommandLine.arguments.contains("--self-test-windows") {
+            setbuf(stdout, nil)
+            AppDelegate.shared = self
+            ClipboardKitConfig.sharedHistoryEnabled = false
+            ClipboardKitConfig.storageFolderName = "ClippyWindowTests-\(UUID().uuidString)"
+            UserDefaults.standard.setVolatileDomain(["textAIProvider": "none", "showMediaBar": false], forName: UserDefaults.argumentDomain)
+            Task { await runWindowRegressionChecks() }
+            return
+        }
         if CommandLine.arguments.contains("--preview-text-ai") {
             setbuf(stdout, nil)
             AppDelegate.shared = self
@@ -802,6 +815,73 @@ extension NSApplication {
 }
 
 #if DEBUG
+// Native regression checks exercise the real local event monitor and window
+// delegates. No clipboard monitor, hotkeys, login item or updater is started.
+extension AppDelegate {
+    @MainActor private func runWindowRegressionChecks() async {
+        func pause() async { try? await Task.sleep(nanoseconds: 300_000_000) }
+        func check(_ passed: Bool, _ message: String) {
+            print("\(passed ? "PASS" : "FAIL"): \(message)")
+            if !passed { exit(1) }
+        }
+        SettingsWindowController.shared.showSettings()
+        await pause()
+        guard let settingsWindow = NSApp.windows.first(where: { $0.title == "Clippy Settings" }) else {
+            check(false, "Settings window exists"); return
+        }
+        showPanelWindow(nearCursor: false)
+        await pause()
+        check(panelWindow?.isVisible == true, "Clipboard opens alongside Settings")
+        // A normal local mouse event must close Clipboard and still reach Settings.
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: 300, y: 20),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: settingsWindow.windowNumber, context: nil, eventNumber: 1,
+                clickCount: 1, pressure: 1) {
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
+        await pause()
+        check(panelWindow == nil && settingsWindow.isVisible, "Clicking Settings dismisses Clipboard")
+        showPanelWindow(nearCursor: false)
+        await pause()
+        settingsWindow.makeKeyAndOrderFront(nil)
+        await pause()
+        check(panelWindow == nil, "Returning keyboard focus to Settings dismisses Clipboard")
+        showPanelWindow(nearCursor: false)
+        hidePanel()
+        showPanelWindow(nearCursor: false)
+        await pause()
+        check(panelWindow?.isVisible == true, "An old close animation cannot hide a new Clipboard window")
+        hidePanel()
+        SettingsWindowController.shared.hide()
+        let manager = ClipboardManager.shared
+        let queue = RecentMediaQueue.shared
+        let expansion = RecentMediaStackExpansion.shared
+        let first = ClipboardItem(contentType: .fileURL, fileURLString: "file:///tmp/clippy-window-test-first.png")
+        let second = ClipboardItem(contentType: .fileURL, fileURLString: "file:///tmp/clippy-window-test-second.png")
+        manager.addItem(first)
+        manager.addItem(second)
+        RecentMediaWindowController.shared.start()
+        expansion.reveal(2)
+        await pause()
+        check(RecentMediaWindowController.shared.panelFrame != nil, "Expanded media shelf is visible")
+        queue.dismiss(first)
+        queue.dismiss(second)
+        await pause()
+        check(RecentMediaWindowController.shared.panelFrame == nil, "Dismissing the last expanded tile hides the shelf")
+        check(manager.items.count == 2, "Dismissing media preserves clipboard history")
+        queue.enqueue(first)
+        await pause()
+        check(RecentMediaWindowController.shared.panelFrame != nil, "A fresh media copy reveals the shelf again")
+        expansion.hide()
+        await pause()
+        try? FileManager.default.removeItem(at: ClipboardItem.storageDirectoryURL)
+        print("Window regression checks passed.")
+        exit(0)
+    }
+}
+
 // Real SwiftUI views with isolated, synthetic history for reproducible listing assets.
 // This mode never starts clipboard monitoring or touches the user's history.
 extension AppDelegate {

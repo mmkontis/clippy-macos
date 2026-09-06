@@ -212,6 +212,8 @@ public final class ClipboardManager: ObservableObject {
 
         // Copy to clipboard
         item.copyToPasteboard()
+        RecentMediaQueue.shared.recordPasteboardCopy(item.isDraggableMedia ? [item.id] : [],
+                                                      changeCount: NSPasteboard.general.changeCount)
 
         // Optionally trigger paste action
         if triggerPaste {

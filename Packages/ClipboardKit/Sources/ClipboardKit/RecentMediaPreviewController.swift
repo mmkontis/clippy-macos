@@ -12,6 +12,7 @@ public final class RecentMediaPreviewController: ObservableObject {
     private var panel: NSPanel?
     private var hosting: NSHostingController<RecentMediaPreviewPanel>?
     private var outsideClickMonitor: Any?
+    private var localOutsideClickMonitor: Any?
 
     private init() {}
 
@@ -119,10 +120,18 @@ public final class RecentMediaPreviewController: ObservableObject {
 
     private func startOutsideClickMonitor() {
         stopOutsideClickMonitor()
+        localOutsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self, let panel = self.panel, panel.isVisible else { return event }
+            if event.window === panel || event.window?.parent === panel { return event }
+            let point = event.window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation
+            if let stack = RecentMediaWindowController.shared.panelFrame, NSPointInRect(point, stack) { return event }
+            self.hidePreview()
+            return event
+        }
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            let click = NSEvent.mouseLocation
             Task { @MainActor in
                 guard let self, let panel = self.panel, panel.isVisible else { return }
-                let click = NSEvent.mouseLocation
                 if NSPointInRect(click, panel.frame) { return }
                 if let stackFrame = RecentMediaWindowController.shared.panelFrame,
                    NSPointInRect(click, stackFrame) {
@@ -134,6 +143,10 @@ public final class RecentMediaPreviewController: ObservableObject {
     }
 
     private func stopOutsideClickMonitor() {
+        if let monitor = localOutsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            localOutsideClickMonitor = nil
+        }
         if let monitor = outsideClickMonitor {
             NSEvent.removeMonitor(monitor)
             outsideClickMonitor = nil

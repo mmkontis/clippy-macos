@@ -61,6 +61,12 @@ public final class ClipboardMonitor: ObservableObject {
         isMonitoring = false
     }
 
+    /// Capture a copy that arrived just before a paste, before the next timer tick.
+    func capturePendingCopy() {
+        guard isMonitoring else { return }
+        checkClipboard()
+    }
+
     /// Checks the clipboard for changes
     private func checkClipboard() {
         let pasteboard = NSPasteboard.general
@@ -76,9 +82,14 @@ public final class ClipboardMonitor: ObservableObject {
 
         // Try to get content from the clipboard
         let items = extractClipboardContent(from: pasteboard, source: sourceApp)
+        var copiedMediaIDs: [UUID] = []
         for item in items {
             clipboardManager.addItem(item)
+            if item.isDraggableMedia, let saved = clipboardManager.items.first {
+                copiedMediaIDs.append(saved.id)
+            }
         }
+        RecentMediaQueue.shared.recordPasteboardCopy(copiedMediaIDs, changeCount: currentChangeCount)
     }
 
     /// Respect the standard hints used by password managers and temporary copies.

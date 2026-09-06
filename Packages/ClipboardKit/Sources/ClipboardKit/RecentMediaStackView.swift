@@ -14,6 +14,7 @@ public final class RecentMediaStackExpansion: ObservableObject {
         isHidden = true
         collapse()
         RecentMediaPreviewController.shared.hidePreview()
+        RecentMediaProjectMenuController.shared.hide()
     }
     public func showRecent() {
         isHidden = false
@@ -42,7 +43,7 @@ public struct RecentMediaStackView: View {
     }
 
     private var historyMedia: [ClipboardItem] {
-        manager.items.filter(\.isDraggableMedia)
+        queue.visibleHistory(from: manager.items)
     }
 
     /// Newest-first, so rendered top-to-bottom = newest on top, oldest at the
@@ -73,11 +74,7 @@ public struct RecentMediaStackView: View {
     }
 
     private func dismiss(_ item: ClipboardItem) {
-        if queue.items.contains(where: { $0.id == item.id }) {
-            queue.dismiss(item)
-        } else {
-            ClipboardManager.shared.removeItem(item)
-        }
+        queue.dismiss(item)
     }
 }
 
