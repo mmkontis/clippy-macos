@@ -153,8 +153,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingView(rootView: view)
         hosting.sizingOptions = []
         hosting.safeAreaRegions = []
-        newWindow.contentView = hosting
-        newWindow.setFrame(NSRect(x: 0, y: 0, width: 720, height: 460), display: false)
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 720, height: 460))
+        hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
+        container.addSubview(hosting)
+        newWindow.contentView = container
         newWindow.title = "Welcome to Clippy"
         newWindow.titleVisibility = .hidden
         newWindow.titlebarAppearsTransparent = true
@@ -162,6 +165,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         newWindow.appearance = NSAppearance(named: .aqua)
         newWindow.isReleasedWhenClosed = false
         newWindow.delegate = self
+        newWindow.setFrame(NSRect(x: 0, y: 0, width: 720, height: 460), display: false)
         window = newWindow
         newWindow.center()
         newWindow.makeKeyAndOrderFront(nil)

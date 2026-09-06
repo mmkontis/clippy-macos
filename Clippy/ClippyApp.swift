@@ -142,7 +142,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        SettingsWindowController.shared.showSettings()
+        if OnboardingWindowController.shared.isVisible {
+            OnboardingWindowController.shared.showOnboarding()
+        } else if flag {
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            SettingsWindowController.shared.showSettings()
+        }
         return true
     }
 
