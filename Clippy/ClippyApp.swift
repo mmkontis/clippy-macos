@@ -183,6 +183,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openAbout() {
+        hidePanel()
+        hideAIPanel()
         SettingsWindowController.shared.showSettings(page: .about)
     }
 
@@ -524,6 +526,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         hidePanel()
+        hideAIPanel()
         SettingsWindowController.shared.showSettings()
     }
     
