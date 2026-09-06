@@ -116,6 +116,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindowController.shared.showSettings()
+        return true
+    }
+
     /// Checks if accessibility permission is granted
     /// Returns true if permission is granted (no prompt shown)
     @discardableResult
