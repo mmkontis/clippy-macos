@@ -32,6 +32,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var mediaBarWindow: NSWindow?
     private var penguinWindow: FloatingPenguinWindow?
     private var eventMonitor: Any?
+    private var localPanelMonitor: Any?
+    private var mediaDismissScroll: CGFloat = 0
     private var aiEventMonitor: Any?
     
     #if !APP_STORE
@@ -250,8 +252,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             AppDelegate.previousActiveApp = frontApp
         }
         
-        // Close existing window
+        // Close existing window and remove both kinds of event monitor.
         panelWindow?.close()
+        if let monitor = localPanelMonitor {
+            NSEvent.removeMonitor(monitor)
+            localPanelMonitor = nil
+        }
         
         // Remove old monitor if exists
         if let monitor = eventMonitor {
@@ -317,6 +323,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Show media bar at bottom of screen
         showMediaBar()
         
+        // Global monitors only see other apps. Local events include Settings
+        // and must pass through after dismissing the clipboard.
+        mediaDismissScroll = 0
+        localPanelMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .scrollWheel]) { [weak self] event in
+            guard let self else { return event }
+            if event.type == .scrollWheel {
+                if let media = self.mediaBarWindow, event.window === media,
+                   abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
+                    self.mediaDismissScroll += abs(event.scrollingDeltaY)
+                    if self.mediaDismissScroll >= 20 { self.hideMediaBar() }
+                    return nil
+                }
+                self.mediaDismissScroll = 0
+                return event
+            }
+            if let panel = self.panelWindow, event.window !== panel,
+               event.window?.parent !== panel, event.window !== self.mediaBarWindow {
+                self.hidePanel()
+            }
+            return event
+        }
+
         // Monitor for clicks outside to close
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             // Check if click is inside media bar
@@ -442,19 +470,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func hidePanel() {
+        if let monitor = localPanelMonitor {
+            NSEvent.removeMonitor(monitor)
+            localPanelMonitor = nil
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
         
         if let panel = panelWindow {
+            // Detach immediately. An old fade-out must not clear a newly opened panel.
+            panelWindow = nil
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.1
                 context.timingFunction = CAMediaTimingFunction(name: .easeIn)
                 panel.animator().alphaValue = 0
             }, completionHandler: {
                 panel.close()
-                Task { @MainActor in self.panelWindow = nil }
             })
         }
         

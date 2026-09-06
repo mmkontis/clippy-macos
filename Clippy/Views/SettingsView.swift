@@ -980,11 +980,12 @@ private struct SettingsSectionPositions: PreferenceKey {
     }
 }
 
-@MainActor final class SettingsWindowController {
+@MainActor final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
     private var window: NSWindow?
 
     func showSettings(page: SettingsPage? = nil) {
+        AppDelegate.shared?.hidePanel()
         if let page { SettingsNavigation.shared.scroll(to: page) }
         if window == nil {
             let newWindow = NSWindow(
@@ -995,6 +996,7 @@ private struct SettingsSectionPositions: PreferenceKey {
             newWindow.contentViewController = NSHostingController(rootView: SettingsView())
             newWindow.isOpaque = false
             newWindow.backgroundColor = .clear
+            newWindow.delegate = self
             newWindow.title = "Clippy Settings"
             newWindow.titleVisibility = .hidden
             newWindow.titlebarAppearsTransparent = true
@@ -1008,6 +1010,10 @@ private struct SettingsSectionPositions: PreferenceKey {
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        AppDelegate.shared?.hidePanel()
     }
 
     func hide() { window?.orderOut(nil) }

@@ -39,3 +39,9 @@ Click the menu bar icon for Clipboard, Text AI, Settings, Updates, About and Get
 The default clipboard shortcut is Command-Shift-V. When another app already owns it, Clippy chooses an available alternative and shows the actual binding in Shortcuts settings. Recording a new shortcut pauses existing bindings; Escape cancels. Key code zero is a valid A key and is preserved across launches.
 
 Appearance offers solid, desktop blur and four subtle color tints. It follows macOS light/dark mode, respects Reduce Transparency, and persists across launches. The AI connection buttons remain visible together; saved keys show a generic prefix and bullets, never a secret suffix. New key entry uses the native secure text field.
+
+## Media shelf and window dismissal
+
+The recent-media stack scrolls down to reveal and up to hide. Hiding preserves both its session queue and clipboard history; a new media copy reveals it again. The horizontal shelf opened with Clipboard hides on a vertical scroll in either direction and still supports horizontal scrolling. Pointer movement into a media preview no longer collapses the expanded stack, and hiding an empty stack cannot race with a newly copied tile. Remaining device-specific hover and auto-dismissal reports are tracked in issue #2.
+
+Clipboard dismissal watches both local and global clicks. Clicking an existing Settings window or bringing it to the front dismisses Clipboard while leaving the Settings click intact. Closing an old clipboard panel cannot clear a newly opened panel. Companion has no menu item or sidebar tab; its customization remains under About.

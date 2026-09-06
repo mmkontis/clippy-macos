@@ -18,6 +18,7 @@ public final class RecentMediaQueue: ObservableObject {
 
     public func enqueue(_ item: ClipboardItem) {
         guard item.contentType == .image || item.contentType == .fileURL else { return }
+        RecentMediaStackExpansion.shared.showRecent()
         items.removeAll { $0.id == item.id }
         items.insert(item, at: 0)
         if items.count > maxItems {

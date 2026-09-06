@@ -48,6 +48,7 @@ public final class RecentMediaWindowController {
                 Task { @MainActor in self?.refresh(animated: true) }
             }
         expansionCancellable = RecentMediaStackExpansion.shared.$revealCount
+            .combineLatest(RecentMediaStackExpansion.shared.$isHidden)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { @MainActor in self?.refresh(animated: true) }
@@ -66,7 +67,8 @@ public final class RecentMediaWindowController {
     }
 
     /// Grows the stack one image at a time as the user scrolls over it, and
-    /// opens it on a sustained downward push at the bottom edge; collapses once
+    /// opens it on a sustained downward push at the bottom edge; upward scroll
+    /// hides the shelf without deleting history. Collapses once
     /// the cursor leaves. We extract the raw deltas synchronously (NSEvent isn't
     /// Sendable) and hop to the main actor with plain values.
     private func startStackInteractionMonitors() {
@@ -106,18 +108,19 @@ public final class RecentMediaWindowController {
         } else {
             return
         }
-        guard inHitArea else { return }
+        guard inHitArea else { scrollAccum = 0; return }
 
-        // Scroll down grows the stack, scroll up shrinks it. (Flip the sign here
-        // if it feels inverted.)
+        // Down reveals more. Up hides the shelf without clearing any clips.
+        // Changing direction starts a fresh gesture instead of fighting old deltas.
+        if scrollAccum * deltaY > 0 { scrollAccum = 0 }
         scrollAccum += -deltaY
         while scrollAccum >= revealScrollStep {
             scrollAccum -= revealScrollStep
             adjustReveal(by: 1)
         }
-        while scrollAccum <= -revealScrollStep {
-            scrollAccum += revealScrollStep
-            adjustReveal(by: -1)
+        if scrollAccum <= -revealScrollStep {
+            scrollAccum = 0
+            RecentMediaStackExpansion.shared.hide()
         }
     }
 
@@ -134,7 +137,10 @@ public final class RecentMediaWindowController {
         // at a time — works whether the stack is hidden, collapsed, or already
         // expanded, so you can open it from nothing and keep pushing for more.
         if overColumn && atBottom {
-            bottomPushAccum += abs(deltaY)
+            // Only a downward push counts. Upward and sideways movement must
+            // not accidentally reveal a shelf the user just hid.
+            guard deltaY > 0 else { bottomPushAccum = 0; return }
+            bottomPushAccum += deltaY
             if bottomPushAccum >= bottomPushThreshold {
                 bottomPushAccum = 0
                 adjustReveal(by: 1)
@@ -147,6 +153,8 @@ public final class RecentMediaWindowController {
         // while a save dropdown opened from a tile is still up (it sits aside).
         if RecentMediaStackExpansion.shared.isExpanded, let panel, panel.isVisible {
             if RecentMediaProjectMenuController.shared.activeItemId != nil { return }
+            if let preview = RecentMediaPreviewController.shared.panelFrame,
+               NSPointInRect(mouse, preview.insetBy(dx: -12, dy: -12)) { return }
             if !NSPointInRect(mouse, panel.frame.insetBy(dx: -44, dy: -44)) {
                 RecentMediaStackExpansion.shared.collapse()
             }
@@ -164,8 +172,8 @@ public final class RecentMediaWindowController {
         var count = current == 0 ? base : current
         count = max(0, min(maxReveal, count + steps))
         let newValue = count > base ? count : 0
-        if newValue != current {
-            RecentMediaStackExpansion.shared.revealCount = newValue
+        if newValue != current || RecentMediaStackExpansion.shared.isHidden {
+            RecentMediaStackExpansion.shared.reveal(newValue)
         }
     }
 
@@ -261,17 +269,13 @@ public final class RecentMediaWindowController {
             ? ClipboardManager.shared.items.contains(where: \.isDraggableMedia)
             : !RecentMediaQueue.shared.items.isEmpty
 
-        if !hasContent {
+        if !hasContent || RecentMediaStackExpansion.shared.isHidden {
             RecentMediaPreviewController.shared.hidePreview()
             if expanded { RecentMediaStackExpansion.shared.collapse() }
-            guard panel.isVisible else { return }
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.18
-                panel.animator().alphaValue = 0
-            }, completionHandler: {
-                panel.orderOut(nil)
-                panel.alphaValue = 1
-            })
+            // Synchronous dismissal avoids an old fade completion hiding fresh
+            // tiles that arrive while the previous queue is disappearing.
+            panel.orderOut(nil)
+            panel.alphaValue = 1
             return
         }
 

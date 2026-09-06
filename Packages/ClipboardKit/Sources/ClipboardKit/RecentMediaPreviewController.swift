@@ -8,6 +8,7 @@ public final class RecentMediaPreviewController: ObservableObject {
 
     @Published public private(set) var activeItemId: UUID?
 
+    public var panelFrame: NSRect? { panel?.isVisible == true ? panel?.frame : nil }
     private var panel: NSPanel?
     private var hosting: NSHostingController<RecentMediaPreviewPanel>?
     private var outsideClickMonitor: Any?

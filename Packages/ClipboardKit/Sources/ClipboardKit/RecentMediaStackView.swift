@@ -9,6 +9,20 @@ import AppKit
 public final class RecentMediaStackExpansion: ObservableObject {
     public static let shared = RecentMediaStackExpansion()
     @Published public internal(set) var revealCount: Int = 0
+    @Published public private(set) var isHidden = false
+    public func hide() {
+        isHidden = true
+        collapse()
+        RecentMediaPreviewController.shared.hidePreview()
+    }
+    public func showRecent() {
+        isHidden = false
+        collapse()
+    }
+    func reveal(_ count: Int) {
+        isHidden = false
+        revealCount = count
+    }
     public var isExpanded: Bool { revealCount > 0 }
     public func collapse() { if revealCount != 0 { revealCount = 0 } }
     private init() {}
@@ -35,6 +49,7 @@ public struct RecentMediaStackView: View {
     /// bottom (corner). Collapsed shows the session queue; revealed shows the
     /// newest `revealCount` images from history.
     private var displayItems: [ClipboardItem] {
+        if expansion.isHidden { return [] }
         if expansion.revealCount > 0 {
             return Array(historyMedia.prefix(expansion.revealCount))
         }
