@@ -221,6 +221,23 @@ final class CodexConnection: ObservableObject {
         unified_exec = false
         apply_patch_freeform = false
         multi_agent = false
+        shell_snapshot = false
+        apps = false
+        plugins = false
+        hooks = false
+        computer_use = false
+        browser_use = false
+        browser_use_external = false
+        browser_use_full_cdp_access = false
+        in_app_browser = false
+        image_generation = false
+        view_image = false
+        code_mode_host = false
+        skill_search = false
+        skill_mcp_dependency_install = false
+        workspace_dependencies = false
+        remote_plugin = false
+        skip_host_skill_discovery = true
         [tools]
         view_image = false
         """
