@@ -9,7 +9,10 @@ fi
 /usr/bin/lipo "$runtime" -verify_arch $ARCHS
 destination="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
 mkdir -p "$destination"
-cp -c "$runtime" "$destination/codex"
+# Older Xcode sandboxes can reject clonefile even for a declared output.
+if ! cp -c "$runtime" "$destination/codex" 2>/dev/null; then
+  cp "$runtime" "$destination/codex"
+fi
 # Xcode deliberately skips signing in unsigned developer builds.
 if [ "$(printenv CODE_SIGNING_ALLOWED || true)" = "NO" ]; then exit 0; fi
 identity="$(printenv EXPANDED_CODE_SIGN_IDENTITY || true)"

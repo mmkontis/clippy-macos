@@ -302,7 +302,7 @@
             buildActionMask = 2147483647;
             files = ();
             inputPaths = ("$(SRCROOT)/scripts/embed-codex.sh", "$(SRCROOT)/.build/codex/$(CLIPPY_CODEX_ARCH)/codex", "$(SRCROOT)/Clippy/CodexHelper.entitlements");
-            outputPaths = ("$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers");
+            outputPaths = ("$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers", "$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/codex");
             name = "Embed Codex";
             runOnlyForDeploymentPostprocessing = 0;
             shellPath = /bin/sh;
